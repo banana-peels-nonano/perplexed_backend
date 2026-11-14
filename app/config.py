@@ -1,0 +1,39 @@
+"""Application settings, read once from the environment and the .env file.
+
+Every other module asks get_settings() for configuration instead of reading
+os.environ itself, so there is exactly one place that knows where settings come from.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    # Reads .env from the current working directory (run commands from the repo root).
+    # Real environment variables win over .env values. Unknown keys are ignored, so
+    # POSTGRES_PASSWORD (which only docker compose needs) doesn't cause an error.
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # Field names match env vars case-insensitively: DATABASE_URL -> database_url.
+    database_url: str
+    test_database_url: str | None = None
+
+    # SecretStr hides the value in repr/logs: print(settings) shows '**********'.
+    # Read the real value only where it is used: settings.anthropic_api_key.get_secret_value()
+    anthropic_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None
+
+    # Connection pool. D-005: never hold a connection across an LLM call, so 10 + 10
+    # connections serve many more concurrent interviews than 20.
+    db_pool_size: int = 10
+    db_max_overflow: int = 10
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Build Settings once per process; later calls return the same object."""
+    return Settings()

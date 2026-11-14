@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from urllib.parse import urlparse
 
 import pytest
+from alembic.config import Config
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from alembic import command
 from app.config import get_settings
 from app.db import make_engine, make_sessionmaker
+from app.models import Base
 
 
 def _test_database_url() -> str:
@@ -43,3 +48,24 @@ async def engine() -> AsyncIterator[AsyncEngine]:
 async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     async with make_sessionmaker(engine)() as s:
         yield s
+
+
+def _upgrade_to_head(url: str) -> None:
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    command.upgrade(cfg, "head")
+
+
+@pytest.fixture
+async def db(engine: AsyncEngine, test_db_url: str) -> AsyncIterator[AsyncEngine]:
+    """A migrated, EMPTY test database.
+
+    Alembic's env.py calls asyncio.run(), which can't run inside this test's event loop,
+    so the upgrade runs in a worker thread (asyncio.to_thread), where no loop is running.
+    Upgrading an already-current schema is a no-op, so this is cheap.
+    """
+    await asyncio.to_thread(_upgrade_to_head, test_db_url)
+    tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
+    async with engine.begin() as conn:
+        await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+    yield engine

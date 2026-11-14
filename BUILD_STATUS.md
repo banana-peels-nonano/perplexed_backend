@@ -1,14 +1,15 @@
 # PERPLEXED 2.0 — Engineering Status
 
-Last updated: 14 November 2026
+Last updated: 15 November 2026
 
 ## 1. Project objective
 
-Build the backend for PERPLEXED 2.0, supporting team investigation,
-AI stakeholder interviews, company records, alliances, submissions,
-judging and event administration.
+Build the backend for PERPLEXED 2.0, supporting team investigation, AI
+stakeholder interviews, evidence discovery, alliances, submissions, judging
+and event administration.
 
-Hard deadline: Thursday, 19 November 2026.
+Hard deadline: Thursday, 19 November 2026. Frontend API stubs due Monday
+17 November, noon. Rehearsal planned for Wednesday 18 November.
 
 ## 2. Environment
 
@@ -18,61 +19,105 @@ Hard deadline: Thursday, 19 November 2026.
 - Docker: 29.9.2
 - Docker Compose: 5.6.1
 - Docker access: sudo; no Docker-group membership
+- PostgreSQL 17 in Docker, published on 127.0.0.1 only; separate test database
 
 ## 3. Architecture decisions
 
-- Modular monolith using FastAPI.
-- PostgreSQL as the primary database.
-- pgvector for vector similarity search.
-- SQLAlchemy for database access.
-- Alembic for schema migrations.
-- Docker Compose for local infrastructure.
-- Separate backend repository from the existing frontend.
-- LLM provider will be selected after benchmarking Claude and Gemini.
+Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
+
+- Modular monolith: one FastAPI service, async throughout.
+- PostgreSQL as the only datastore. **No pgvector, Redis or Celery**: retrieval is
+  deterministic, and the event's bottleneck is provider rate limits, not our servers.
+- SQLAlchemy 2 (async) and Alembic; never hold a database connection across a model call.
+- **Model:** Claude Haiku 5.5 for answers and for question classification, with
+  low effort, no extended thinking, JSON-schema output and prompt caching.
+  Gemini is a manual fallback. No load balancer: one provider account, measured headroom.
+- **Retrieval:** eligibility rules decide what a stakeholder may reveal (company,
+  access by trust tier, unlock rules, phase); ranking orders it (topics, then
+  full-text); a token budget caps it. Participants never browse records.
+- **Disclosure:** the model cites; the database quotes. Cards are rendered from
+  the case at the permitted mode; replies are checked in code before anyone sees
+  them.
+- Full conversation history per thread (no sliding window); the quota bounds its length.
+- Sessions are server-side (HttpOnly cookie, hashed token, at most 2 per team).
+- Real case content is never committed to this repository.
+- Backend repository kept separate from the frontend.
 
 ## 4. Security principles
 
-- Server-side company isolation.
-- Hidden trust and unrevealed clues never exposed to participants.
-- Secrets excluded from Git.
-- Local database bound to loopback only.
-- No Docker-group membership.
-- Persistent audit trail for competition actions.
+- Server-side company isolation; another company's resources answer 404.
+- Hidden trust and unrevealed evidence never reach participants, including through
+  evidence cards or response metadata.
+- Participant input is escaped and treated as data, never as instructions.
+- Every reply is checked for leaked passages, figures in paraphrase mode, invented
+  facts and the stakeholder's internal marker.
+- Secrets excluded from Git; `.env` is mode 600; dev and event API keys kept apart.
+- Local database bound to loopback only; no Docker-group membership.
+- Every model call is recorded with tokens, cost and latency.
 
-## 5. Event-rule questions to resolve
+## 5. Implementation progress
 
-- Confirm two-round versus four-round event format.
-- Confirm final phase names and durations.
-- Confirm team-size policy.
-- Confirm three-team alliance scoring.
-- Confirm question quotas.
-- Confirm tie-breaker implementation.
-- Confirm time-add-back procedure.
+| Component | Status | Notes |
+|---|---|---|
+| Development environment | Done | Docker, Postgres 17, venv, test database |
+| FastAPI foundation | Done | settings, error envelope, health check |
+| Database schema and migrations | Done | migrations 0001, 0002 |
+| Case format, loader, seed | Done | validated TOML; placeholder case only |
+| Authentication and teams | Done | access codes, sessions, team context |
+| Interview flow | Done | quota, idempotency, one question in flight, refund on failure, memory |
+| Retrieval | Done | recall 17/17 on the placeholder case |
+| Disclosure and grounding checks | Done | leak, paraphrase, ungrounded-fact, citation checks; safe non-answers |
+| LLM provider layer | Done | Anthropic provider, fake provider for tests, cost accounting |
+| Hostile-question suite | Done | 27 probes, 0 leaks on the placeholder case |
+| Event engine (phases) | Partial | phase model and gating exist; organiser controls pending |
+| Trust and HR mechanics | Pending | trust is stored and used; movement and lockouts not built |
+| Evidence board | Partial | cards and discoveries recorded; board state pending frontend design |
+| Live updates (WebSockets) | Pending | |
+| Admin and organiser endpoints | Pending | |
+| Real case conversion | Pending | case expected Monday |
+| Alliances | Pending | |
+| Submissions and judging | Pending | |
+| Frontend integration | Pending | frontend owned by another team member |
+| Staging and production deployment | Pending | |
 
-## 6. Implementation progress
+Tests: 110 passing (`python -m pytest -q`).
 
-| Component | Status |
-|---|---|
-| Ubuntu development environment | Verified |
-| Docker Engine | Verified |
-| Python virtual environment | Verified |
-| Backend repository | In progress |
-| PostgreSQL + pgvector | Pending |
-| FastAPI foundation | Pending |
-| Authentication and teams | Pending |
-| Event engine | Pending |
-| AI engine and retrieval | Pending |
-| Trust and HR mechanics | Pending |
-| Records and Evidence Board | Pending |
-| Alliances | Pending |
-| Submissions and judging | Pending |
-| Admin and audit logging | Pending |
-| Frontend integration | Pending |
-| Staging and production deployment | Pending |
+## 6. Measured so far (placeholder case)
 
-## 7. Current blockers
+- Cost per question: $0.00020–0.00025 over full 10-question threads.
+- Event estimate: $1.70–2.10 for 150 teams × 4–5 stakeholders × 10 questions;
+  about +$0.75 if real records fill the evidence budget.
+- Peak load estimate (450 questions/min): ~520k input tokens/min, ~1,040 requests/min,
+  ~120k output tokens/min. Compare against the account's real limits before the event.
+- Latency: about 3–5 s per question (classification + answer); +2 s when a reply
+  is regenerated.
 
-- Event-format clarifications.
-- Actual stakeholder, clue and company-record content.
-- Final hosting/deployment target.
-- Provider quota and credit verification.
+These must be re-measured on the real case.
+
+## 7. Next
+
+1. API contract and stubs for the frontend (Monday noon).
+2. Trust movement and HR lockouts.
+3. Organiser controls: phases, content reload, live configuration, organiser view.
+4. WebSocket notifications.
+5. Real case conversion, its own hostile-question suite and recall test.
+6. Evidence board state, alliances, submissions and judging.
+7. Deployment, backups, load test, rehearsal.
+
+## 8. Event-rule questions to resolve
+
+- Number of teams (40–70 or 100+).
+- Question quota per stakeholder.
+- HR threshold and lockout window.
+- Final phase names and durations; event date and timings.
+- Two-round versus four-round format; team-size policy.
+- Whether submissions can be revised.
+- Three-team alliance scoring; tie-breakers; time-add-back procedure.
+- Evidence board behaviour (frontend design).
+
+## 9. Current blockers
+
+- Real stakeholder, clue and company-record content (expected Monday).
+- Event-format clarifications above.
+- Final hosting and deployment target.
+- Provider rate limits for the event key.

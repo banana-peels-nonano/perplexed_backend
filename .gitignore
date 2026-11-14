@@ -35,3 +35,6 @@ htmlcov/
 *.pyc
 cost_probe_calls.csv
 reports/
+
+# Real case content: never in this public repository
+content/

@@ -88,9 +88,17 @@ Add `--fake` to the first two to run without API calls.
 | GET | `/api/v1/stakeholders/{id}` | one stakeholder |
 | POST | `/api/v1/stakeholders/{id}/questions` | ask; returns the answer and evidence cards |
 | GET | `/api/v1/stakeholders/{id}/messages` | the team's thread with that stakeholder |
+| GET | `/api/v1/status` | phase, time left, questions left per stakeholder, evidence count |
+| GET | `/api/v1/evidence` | every card the team has been shown, from any stakeholder |
+| GET | `/api/v1/board` | the team's evidence board |
+| PUT | `/api/v1/board` | save the board; send the `version` you edited (409 if someone saved first) |
 
 Errors are always `{"error": {"code", "message", "details"}}`. Another company's
 stakeholder is a 404.
+
+The board holds evidence cards (only passages the team has been shown), quote cards
+(the server cuts the text from the team's own answers), notes, team-drawn labelled
+links, and a small free-form `extra` object for the UI. The server never computes links.
 
 ## Case content
 
@@ -112,6 +120,7 @@ app/content/     case schema, loader, in-memory content store
 app/interview/   eligibility, ranking, prompts, rendering, disclosure and grounding checks, the ask service
 app/llm/         provider interface, Anthropic provider, fake provider, pricing
 app/models/      SQLAlchemy models (content and runtime)
+app/portal/      phase clock and evidence-board rules
 alembic/         migrations
 scripts/         dev tools
 tests/           pytest suite and fixtures

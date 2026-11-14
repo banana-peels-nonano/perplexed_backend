@@ -169,6 +169,22 @@ class TeamDisclosure(Base):
     )
 
 
+class TeamBoard(Base):
+    """The team's evidence board (app/portal/board.py says what it may hold).
+
+    One row per team. `version` is bumped on every save; a save based on an older version
+    is refused, so two laptops editing at once can't silently overwrite each other.
+    """
+
+    __tablename__ = "team_board"
+    __table_args__ = (CheckConstraint("version >= 1", name="version"),)
+
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer)
+    doc: Mapped[dict] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class LlmCall(Base):
     """Every provider call: tokens, cost, latency. Cost monitoring is a SUM over this table."""
 

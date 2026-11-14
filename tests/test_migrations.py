@@ -30,6 +30,7 @@ EXPECTED_TABLES = {
     "team_stakeholder_state",
     "message",
     "team_disclosure",
+    "team_board",
     "llm_call",
 }
 

@@ -61,7 +61,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 |---|---|---|
 | Development environment | Done | Docker, Postgres 17, venv, test database |
 | FastAPI foundation | Done | settings, error envelope, health check |
-| Database schema and migrations | Done | migrations 0001, 0002 |
+| Database schema and migrations | Done | migrations 0001–0003 |
 | Case format, loader, seed | Done | validated TOML; placeholder case only |
 | Authentication and teams | Done | access codes, sessions, team context |
 | Interview flow | Done | quota, idempotency, one question in flight, refund on failure, memory |
@@ -71,7 +71,8 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 | Hostile-question suite | Done | 27 probes, 0 leaks on the placeholder case |
 | Event engine (phases) | Partial | phase model and gating exist; organiser controls pending |
 | Trust and HR mechanics | Pending | trust is stored and used; movement and lockouts not built |
-| Evidence board | Partial | cards and discoveries recorded; board state pending frontend design |
+| Portal endpoints | Done | status (phase clock), evidence list, board save/load |
+| Evidence board | Partial | storage and checks done; UI design pending (frontend team) |
 | Live updates (WebSockets) | Pending | |
 | Admin and organiser endpoints | Pending | |
 | Real case conversion | Pending | case expected Monday |
@@ -80,7 +81,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 | Frontend integration | Pending | frontend owned by another team member |
 | Staging and production deployment | Pending | |
 
-Tests: 110 passing (`python -m pytest -q`).
+Tests: 119 passing (`python -m pytest -q`).
 
 ## 6. Measured so far (placeholder case)
 
@@ -96,8 +97,8 @@ These must be re-measured on the real case.
 
 ## 7. Next
 
-1. API contract and stubs for the frontend (Monday noon).
-2. Trust movement and HR lockouts.
+1. Trust movement and HR lockouts.
+2. Share the API (OpenAPI at `/docs`) with the frontend team (Monday noon).
 3. Organiser controls: phases, content reload, live configuration, organiser view.
 4. WebSocket notifications.
 5. Real case conversion, its own hostile-question suite and recall test.

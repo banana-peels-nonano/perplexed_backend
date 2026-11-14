@@ -36,8 +36,15 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
-        # malformed request bodies get the same shape as every other error
+        # malformed request bodies get the same shape as every other error. Only type,
+        # location and message: pydantic's `ctx` can hold exception objects (not JSON), and
+        # `input` would echo the whole body back (step 9: a board rule's ValueError crashed
+        # this handler instead of returning 422)
+        errors = [
+            {"type": e.get("type"), "loc": list(e.get("loc", ())), "msg": e.get("msg")}
+            for e in exc.errors()
+        ]
         return JSONResponse(
             status_code=422,
-            content=_body("INVALID_REQUEST", "request body is invalid", {"errors": exc.errors()}),
+            content=_body("INVALID_REQUEST", "request body is invalid", {"errors": errors}),
         )

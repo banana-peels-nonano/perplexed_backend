@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     db_pool_size: int = 10
     db_max_overflow: int = 10
 
+    # Session cookie. Secure=True means the browser only sends it over HTTPS:
+    # keep False for local http://localhost, set COOKIE_SECURE=true behind Caddy/TLS.
+    cookie_secure: bool = False
+    session_ttl_hours: int = 24  # an overnight event fits in one session
+
 
 @lru_cache
 def get_settings() -> Settings:

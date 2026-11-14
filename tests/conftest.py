@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from pathlib import Path
 from urllib.parse import urlparse
 
+import httpx
 import pytest
 from alembic.config import Config
 from sqlalchemy import text
@@ -13,8 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from alembic import command
 from app.config import get_settings
-from app.db import make_engine, make_sessionmaker
+from app.db import get_session, make_engine, make_sessionmaker
+from app.main import create_app
 from app.models import Base
+from app.seed import run_seed
+
+FIXTURE = Path(__file__).parent / "fixtures" / "northfield.toml"
 
 
 def _test_database_url() -> str:
@@ -69,3 +75,38 @@ async def db(engine: AsyncEngine, test_db_url: str) -> AsyncIterator[AsyncEngine
     async with engine.begin() as conn:
         await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     yield engine
+
+
+@pytest.fixture
+async def seeded(db: AsyncEngine) -> dict[str, str]:
+    """Fixture case loaded, one team per company. Returns {team code: access code}."""
+    async with make_sessionmaker(db)() as session, session.begin():
+        report = await run_seed(session, FIXTURE, teams_per_company=1)
+    return report.new_codes
+
+
+@pytest.fixture
+async def make_client(db: AsyncEngine) -> AsyncIterator[Callable[[], httpx.AsyncClient]]:
+    """Factory for HTTP clients that talk to the app in-process (no server, no network).
+
+    Each client is like a separate laptop: its own cookie jar. Every request's database
+    session comes from the test database instead of DATABASE_URL.
+    """
+    app = create_app()
+    maker = make_sessionmaker(db)
+
+    async def _test_session():
+        async with maker() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _test_session
+    clients: list[httpx.AsyncClient] = []
+
+    def _make() -> httpx.AsyncClient:
+        client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+        clients.append(client)
+        return client
+
+    yield _make
+    for client in clients:
+        await client.aclose()

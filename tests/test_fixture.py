@@ -9,7 +9,7 @@ import pytest
 
 from app.content.loader import load_case
 from app.content.schema import Case, Mode
-from app.interview.disclosure import check_reply
+from app.interview.disclosure import check_reply, mentions
 from app.interview.eligibility import eligible_passages, question_context
 
 FIXTURE = Path(__file__).parent / "fixtures" / "northfield.toml"
@@ -84,3 +84,32 @@ def test_citation_cases(cc):
         assert [c.passage_id for c in result.cards] == cc.expect_cards
         for card in result.cards:  # cards carry authentic text, not the model's wording
             assert card.excerpt == CASE.passage[card.passage_id].text
+
+
+@pytest.mark.parametrize(
+    "reply, fingerprint, hit",
+    [
+        # step 7, live: haiku spelled out figures and slipped past literal matching
+        ("protect our nine percent operating margin target", "9 percent operating margin", True),
+        ("it falls by fifteen per cent", "15 percent", True),
+        ("a 15% cut", "15 percent", True),
+        ("from 1.42 Cr to 1.21 crores", "1.42 crore", True),
+        ("roughly one in eighty units", "1 in 80", True),
+        ("3050 units", "3,050", True),
+        ("Don\u2019t log it", "Don't log it", True),
+        ("twenty-five percent", "25 percent", True),
+        # and no false alarms on numbers that merely contain the figure
+        ("nineteen percent", "9 percent", False),
+        ("about 1.15 percent", "15 percent", False),
+        ("we hit 141.7 crore", "41.7 crore", False),
+    ],
+)
+def test_fingerprints_match_spelled_out_and_reformatted_figures(reply, fingerprint, hit):
+    assert mentions(reply, fingerprint) is hit
+
+
+def test_spelled_out_paraphrase_figure_is_blocked():
+    provided = {"A-FIN-002#1": Mode.paraphrase}
+    reply = "I approved it to protect our nine percent operating margin target."
+    result = check_reply(CASE, "cfo", provided, ["A-FIN-002#1"], reply)
+    assert not result.ok and result.violations == ["figure_in_paraphrase"]

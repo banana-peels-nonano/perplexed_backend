@@ -188,3 +188,34 @@ async def test_disclosure_unlocks_the_deleted_message_for_later_questions(
     assert 'id="A-COM-001#3"' in second_prompt  # unlocked by the first disclosure
     assert body["evidence"][0]["passage_id"] == "A-COM-001#3"
     assert "Don't log it" in body["evidence"][0]["excerpt"]
+
+
+async def test_repeating_a_figure_already_given_to_this_team_is_not_a_leak(
+    seeded, make_client, fake, db
+):
+    # step 7, live: at open trust the CFO gave the 15 percent figure, then repeated it while
+    # answering a revenue question. The figure wasn't in that turn's evidence, so the check
+    # called it a leak and a regeneration was wasted. What she already said isn't new.
+    await _sql(db, "UPDATE team_stakeholder_state SET trust = 80")
+    revenue = {"label": "specific", "topics": ["revenue"], "respectful": True}
+    fake.queues["classify"] += [QA_BUDGET, revenue, revenue]
+    fake.queues["answer"] += [
+        {"reply": "The QA budget fell by 15 percent.", "cited": ["A-FIN-002#2"]},
+        {"reply": "Revenue was 41.7 crore, despite the 15 percent QA cut.", "cited": []},
+        {"reply": "And 1.21 crore is what QA has now.", "cited": []},  # never said: a leak
+    ]
+    client = await _team(make_client, seeded)
+    first = (await _ask(client, "cfo", "Exactly how much was the QA budget cut?")).json()
+    assert first["status"] == "answered" and first["evidence"][0]["passage_id"] == "A-FIN-002#2"
+
+    second = (await _ask(client, "cfo", "And how did revenue do?")).json()
+    assert second["status"] == "answered" and "15 percent" in second["answer"]
+    assert len(fake.calls_for("answer")) == 2  # first attempt passed, no regeneration
+
+    third = (await _ask(client, "cfo", "What is QA's budget now?")).json()
+    assert "1.21 crore" not in third["answer"]  # not said before, not in evidence: blocked
+    assert len(fake.calls_for("answer")) == 4  # regenerated once
+
+    # one schema for every answer call to this stakeholder, so the prompt cache survives
+    schemas = {repr(c.schema) for c in fake.calls_for("answer")}
+    assert len(schemas) == 1

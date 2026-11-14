@@ -241,6 +241,9 @@ async def ask_question(
     history = _pairs(list(answered))
     recent_answers = [m for m in answered if m.role == "answer"][-2:]
     recently_cited = {pid for m in recent_answers for pid in m.cited}
+    # every earlier answer in this thread already passed the checks (or is the deflection),
+    # so repeating a figure from one of them tells the team nothing new
+    already_said = "\n".join(m.text for m in answered if m.role == "answer")
 
     # ---------------------------------------------------------------- model calls
     results: list[tuple[str, LlmResult]] = []
@@ -295,13 +298,13 @@ async def ask_question(
                 purpose="answer",
                 model=models["answer"],
                 prompt=p,
-                schema=answer_schema(evidence),
+                schema=answer_schema(case, stakeholder_id),
                 max_tokens=600,
             )
             results.append(("answer", res))
             draft = str(res.data.get("reply", ""))
             cited = [str(c) for c in res.data.get("cited", [])]
-            check = check_reply(case, stakeholder_id, provided, cited, draft)
+            check = check_reply(case, stakeholder_id, provided, cited, draft, already_said)
             if check.ok:
                 status, reply, cards = "answered", draft, check.cards
                 break

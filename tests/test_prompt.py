@@ -9,6 +9,7 @@ from app.interview.prompt import (
     answer_schema,
     build_answer_prompt,
     build_classifier_prompt,
+    build_system,
     classifier_schema,
 )
 from app.interview.ranking import rank_passages
@@ -107,11 +108,25 @@ def test_recently_cited_passages_stay_in_play_for_follow_ups():
     assert ranked == ["A-FIN-002#1"]
 
 
-def test_answer_schema_only_allows_citing_quote_or_paraphrase_evidence():
-    schema = answer_schema([("A-FIN-002#1", Mode.paraphrase), ("A-FIN-001#2", Mode.aware)])
-    assert schema["properties"]["cited"]["items"]["enum"] == ["A-FIN-002#1"]
-    none = answer_schema([("A-FIN-001#2", Mode.aware)])
-    assert none["properties"]["cited"]["maxItems"] == 0
+def test_answer_schema_is_stable_per_stakeholder_and_limited_to_its_citable_passages():
+    # step 7: a per-turn enum broke prompt caching, so the schema must not depend on the turn
+    enum = answer_schema(CASE, "cfo")["properties"]["cited"]["items"]["enum"]
+    assert enum == answer_schema(CASE, "cfo")["properties"]["cited"]["items"]["enum"]
+    assert "A-FIN-002#1" in enum and "A-FIN-002#2" in enum  # paraphrase now, quote when open
+    ops = answer_schema(CASE, "ops_head")["properties"]["cited"]["items"]["enum"]
+    assert "A-OPS-002#2" not in ops  # aware even at open trust: never citable
+    assert all(CASE.passage[p].record.startswith("A-") for p in enum)  # own company only
+    assert enum != answer_schema(CASE, "qa_lead")["properties"]["cited"]["items"]["enum"]
+
+
+def test_system_prompt_names_real_colleagues_only():
+    # step 7: haiku called "A. Rao" "Anil Rao"; the persona now knows its colleagues' names
+    system = build_system(CASE, "cfo")
+    assert "Arjun Rao, Head of Plant Operations" in system and "Meera Iyer" in system
+    assert "Ritu Malhotra, Chief" in system  # herself, in WHO YOU ARE
+    assert "Daniel Okafor" not in system  # the other company's stakeholder
+    assert system == build_system(CASE, "cfo")  # still identical every turn -> cacheable
+    assert "Never offer to send" in system  # step 7: she kept offering to send the pack
 
 
 def test_classifier_sees_no_evidence_and_only_company_topics():

@@ -1,0 +1,861 @@
+# PERPLEXED backend test fixture: one company (Northfield), three stakeholders,
+# 8 records, 25 passages. Plus a one-stakeholder stub company (Kestrel) that exists
+# only so company-isolation tests have something to be isolated from.
+#
+# This is fictional TEST DATA for development. It is safe to commit.
+# Real competition content goes in content/ (git-ignored), in this same format.
+#
+# Conventions
+#   trust tiers   : guarded < neutral < open
+#   access modes  : deny < aware < paraphrase < quote
+#                   deny        = never in the model's context (also the default when
+#                                 a passage is not listed for a stakeholder)
+#                   aware       = title + one line only; may not be cited
+#                   paraphrase  = text in context; reply must not contain its fingerprints
+#                   quote       = text in context; may be quoted verbatim
+#   unlock rules  : every rule on an access entry must pass, or the passage is not eligible
+#   judge-only    : clue, truth, contradictions. Never sent to a model or a participant.
+
+schema_version = 1
+case_id = "fixture-northfield"
+phases = ["briefing", "solo", "alliance_window", "joint", "submission_closed", "round2"]
+labels = ["specific", "broad", "vague", "repetitive", "hostile", "prompt_attack", "off_topic"]
+
+# ------------------------------------------------------------------ companies
+[company.A]
+name = "Northfield Components"
+departments = ["finance", "operations"]
+topics = ["revenue", "warranty", "qa_budget", "inspection", "resin", "supplier",
+          "retests", "shipments", "partner_pricing", "board", "overtime"]
+
+[company.B]
+name = "Kestrel Polymers"
+departments = ["quality"]
+topics = ["resin", "lot_release", "waiver"]
+
+# ------------------------------------------------------------------ stakeholders
+[stakeholder.cfo]
+company = "A"
+department = "finance"
+name = "Ritu Malhotra"
+role = "Chief Financial Officer"
+canary = "NF-CFO-7Q2X"
+persona = """Precise, defensive about her forecasts, proud of cost discipline. Impatient with
+vague questions; warmer with people who bring numbers. Wants the partnership with Kestrel
+to survive the board review."""
+beliefs = [
+  "The warranty spike is caused by out-of-spec resin from Kestrel Polymers.",
+  "The QA reduction this year was a modest trim, around 5 percent.",
+  "Operations has never told you the QA changes caused a capacity problem.",
+]
+
+[stakeholder.ops_head]
+company = "A"
+department = "operations"
+name = "Arjun Rao"
+role = "Head of Plant Operations"
+canary = "NF-OPS-3K9M"
+persona = """Blunt, under pressure to hit shipment targets, protective of his team. Blames
+finance for every constraint. Gets curt when asked about the shop floor."""
+beliefs = [
+  "Finance's budget cut forced the inspection sampling change.",
+  "You have never told anyone to skip retests.",
+  "QA was informed about Kestrel's resin moisture notice.",
+]
+
+[stakeholder.qa_lead]
+company = "A"
+department = "operations"
+name = "Meera Iyer"
+role = "QA Supervisor, X-series line"
+canary = "NF-QAL-5T1R"
+persona = """Careful, worried about her job, documents everything. Speaks plainly once she
+trusts you; vague and procedural until then."""
+beliefs = [
+  "The sampling change was Arjun's decision; finance only cut QA headcount.",
+  "You were told to release lots without retests, and you objected in writing.",
+]
+
+[stakeholder.kestrel_qc]
+company = "B"
+department = "quality"
+name = "Daniel Okafor"
+role = "Quality Control Manager"
+canary = "KP-QCM-8W4E"
+persona = "Isolation stub. Methodical and cautious."
+beliefs = ["Northfield asked for the moisture waiver to protect its volume commitments."]
+
+# ------------------------------------------------------------------ records
+[record."A-FIN-001"]
+company = "A"
+kind = "financials"
+title = "Quarterly results summary, Q1-Q3"
+date = "2026-10-05"
+
+[record."A-FIN-002"]
+company = "A"
+kind = "memo"
+title = "Cost programme memo: QA budget"
+date = "2026-03-04"
+
+[record."A-FIN-003"]
+company = "A"
+kind = "ledger"
+title = "Warranty claims ledger, Apr-Sep"
+date = "2026-10-02"
+
+[record."A-OPS-001"]
+company = "A"
+kind = "notice"
+title = "Inspection procedure change notice, X-series"
+date = "2026-03-15"
+
+[record."A-OPS-002"]
+company = "A"
+kind = "log"
+title = "QA defect log summary, X-series housings"
+date = "2026-09-30"
+
+[record."A-OPS-003"]
+company = "A"
+kind = "email"
+title = "Supplier quality notice from Kestrel Polymers"
+date = "2026-05-02"
+
+[record."A-COM-001"]
+company = "A"
+kind = "chat_log"
+title = "#plant-floor channel, May-June"
+date = "2026-06-20"
+
+[record."A-CAL-001"]
+company = "A"
+kind = "calendar"
+title = "CFO calendar, week of 12 May"
+date = "2026-05-12"
+
+[record."B-QC-001"]
+company = "B"
+kind = "lot_release"
+title = "Lot release record RL-2207 to RL-2219"
+date = "2026-04-18"
+
+# ------------------------------------------------------------------ passages
+# fingerprints: distinctive strings whose appearance in a reply proves the passage
+# leaked (used by output validation). Keep them specific enough not to collide.
+
+[passage."A-FIN-001#1"]
+record = "A-FIN-001"
+topics = ["revenue"]
+text = "Revenue fell from 48.2 crore in Q1 to 41.7 crore in Q3."
+fingerprints = ["41.7 crore", "48.2 crore"]
+truth = "true"
+
+[passage."A-FIN-001#2"]
+record = "A-FIN-001"
+topics = ["warranty", "revenue"]
+text = "Warranty provisions rose from 0.9 crore in Q1 to 2.1 crore in Q3."
+fingerprints = ["2.1 crore"]
+truth = "true"
+clue = "C03"
+
+[passage."A-FIN-001#3"]
+record = "A-FIN-001"
+topics = ["overtime", "revenue"]
+text = "Plant overtime cost doubled between Q1 and Q3, from 0.6 crore to 1.2 crore."
+fingerprints = ["1.2 crore"]
+truth = "true"
+
+[passage."A-FIN-002#1"]
+record = "A-FIN-002"
+topics = ["qa_budget"]
+text = "As part of the FY cost programme, the quality-assurance budget is reduced. Approved: R. Malhotra, CFO. Rationale: protect the 9 percent operating margin target."
+fingerprints = ["9 percent operating margin"]
+truth = "true"
+
+[passage."A-FIN-002#2"]
+record = "A-FIN-002"
+topics = ["qa_budget"]
+text = "The QA budget falls by 15 percent, from 1.42 crore to 1.21 crore, effective 1 April."
+fingerprints = ["15 percent", "1.21 crore", "1.42 crore"]
+truth = "true"
+clue = "C01"
+
+[passage."A-FIN-002#3"]
+record = "A-FIN-002"
+topics = ["qa_budget", "inspection"]
+text = "Copied to: A. Rao (Operations). Inspection headcount reductions to be absorbed by Operations as it sees fit."
+fingerprints = ["absorbed by Operations"]
+truth = "true"
+
+[passage."A-FIN-003#1"]
+record = "A-FIN-003"
+topics = ["warranty"]
+text = "X-series housings account for 412 of 690 warranty claims logged between April and September."
+fingerprints = ["412 of 690"]
+truth = "true"
+clue = "C03"
+
+[passage."A-FIN-003#2"]
+record = "A-FIN-003"
+topics = ["warranty", "resin"]
+text = "Failed X-series housings trace back to resin lots RL-2207 through RL-2219."
+fingerprints = ["RL-2207"]
+truth = "true"
+clue = "C04"
+
+[passage."A-FIN-003#3"]
+record = "A-FIN-003"
+topics = ["warranty"]
+text = "Average cost per X-series warranty claim: Rs 3,050, including replacement and freight."
+fingerprints = ["3,050"]
+truth = "true"
+
+[passage."A-OPS-001#1"]
+record = "A-OPS-001"
+topics = ["inspection"]
+text = "Effective 1 April, incoming inspection sampling for X-series housings changes from 1 in 20 to 1 in 80."
+fingerprints = ["1 in 80"]
+truth = "true"
+clue = "C02"
+
+[passage."A-OPS-001#2"]
+record = "A-OPS-001"
+topics = ["inspection", "qa_budget"]
+text = "Reason for change: to match revised QA staffing. Signed: Arjun Rao, Head of Plant Operations."
+fingerprints = ["revised QA staffing"]
+truth = "true"
+
+[passage."A-OPS-001#3"]
+record = "A-OPS-001"
+topics = ["inspection", "qa_budget"]
+text = "Reference: Cost programme memo of 4 March (Finance)."
+fingerprints = ["memo of 4 March"]
+truth = "true"
+
+[passage."A-OPS-002#1"]
+record = "A-OPS-002"
+topics = ["inspection", "resin", "warranty"]
+text = "Moisture-related voids found in 3.8 percent of sampled housings from April to September, against a 0.6 percent baseline."
+fingerprints = ["3.8 percent"]
+truth = "true"
+clue = "C04"
+
+[passage."A-OPS-002#2"]
+record = "A-OPS-002"
+topics = ["retests", "shipments"]
+text = "Retest failures for 14 lots are marked 'released per shift instruction' with no QA signature."
+fingerprints = ["released per shift instruction"]
+truth = "true"
+clue = "C05"
+
+[passage."A-OPS-002#3"]
+record = "A-OPS-002"
+topics = ["resin", "inspection"]
+text = "Pre-drying of resin before moulding was skipped for the X-series from April, after the drying ovens were reassigned to the new line."
+fingerprints = ["drying ovens were reassigned"]
+truth = "true"
+clue = "C06"
+
+[passage."A-OPS-003#1"]
+record = "A-OPS-003"
+topics = ["resin", "supplier"]
+text = "Kestrel Polymers notified Northfield that lots RL-2207 to RL-2219 carry elevated moisture and recommended pre-drying for 4 hours at 80 C before moulding."
+fingerprints = ["4 hours at 80"]
+truth = "true"
+clue = "C06"
+
+[passage."A-OPS-003#2"]
+record = "A-OPS-003"
+topics = ["supplier", "resin"]
+text = "The notice was forwarded internally to A. Rao only. No acknowledgement to Kestrel is on file."
+fingerprints = ["forwarded internally to A. Rao only"]
+truth = "true"
+
+[passage."A-OPS-003#3"]
+record = "A-OPS-003"
+topics = ["supplier", "shipments"]
+text = "Kestrel follow-up on 20 May: 'No response received. Please confirm handling of the affected lots.'"
+fingerprints = ["No response received"]
+truth = "true"
+
+[passage."A-COM-001#1"]
+record = "A-COM-001"
+topics = ["inspection"]
+text = "Meera Iyer: Void rate on X-series is climbing. Requesting we go back to 1-in-20 sampling."
+fingerprints = ["go back to 1-in-20"]
+truth = "true"
+
+[passage."A-COM-001#2"]
+record = "A-COM-001"
+topics = ["shipments", "inspection"]
+text = "Arjun Rao: We hit the June shipment target first. Sampling stays where it is."
+fingerprints = ["June shipment target"]
+truth = "true"
+
+[passage."A-COM-001#3"]
+record = "A-COM-001"
+topics = ["retests", "shipments"]
+deleted = true
+text = "Arjun Rao (message deleted): Skip the retests on the RL-22 lots and release them. Don't log it."
+fingerprints = ["Don't log it"]
+truth = "true"
+clue = "C05"
+
+[passage."A-COM-001#4"]
+record = "A-COM-001"
+topics = ["retests"]
+text = "Meera Iyer: Logging my objection here. I am not signing off on lots that failed retest."
+fingerprints = ["Logging my objection"]
+truth = "true"
+
+[passage."A-CAL-001#1"]
+record = "A-CAL-001"
+topics = ["partner_pricing", "supplier"]
+text = "Tue 13 May, 15:00: Kestrel pricing renegotiation, with Kestrel CFO."
+fingerprints = ["Kestrel pricing renegotiation"]
+truth = "true"
+
+[passage."A-CAL-001#2"]
+record = "A-CAL-001"
+topics = ["board", "warranty"]
+text = "Thu 15 May, 10:00: Board pre-read, margin recovery. Agenda has no warranty item."
+fingerprints = ["no warranty item"]
+truth = "true"
+
+[passage."A-CAL-001#3"]
+record = "A-CAL-001"
+topics = ["qa_budget"]
+text = "Fri 16 May, 11:00: QA staffing review (cancelled by R. Malhotra)."
+fingerprints = ["QA staffing review"]
+truth = "true"
+clue = "C01"
+
+[passage."B-QC-001#1"]
+record = "B-QC-001"
+topics = ["resin", "lot_release"]
+text = "Lots RL-2207 to RL-2219 released at 0.31 percent moisture against a 0.20 percent specification."
+fingerprints = ["0.31 percent moisture"]
+truth = "true"
+clue = "C07"
+
+[passage."B-QC-001#2"]
+record = "B-QC-001"
+topics = ["waiver"]
+text = "Release made under a customer waiver requested by Northfield purchasing to protect delivery volumes."
+fingerprints = ["customer waiver requested by Northfield"]
+truth = "true"
+clue = "C07"
+
+# ------------------------------------------------------------------ access
+# One entry per (stakeholder, passage) the stakeholder knows. Anything not listed = deny.
+# guarded / neutral / open = mode at that trust tier.
+# Optional unlock rules: labels, requires_topic, requires_disclosed, phase_from.
+
+# --- CFO: finance records and her own calendar; never sees ops chat or the Kestrel email
+[[access]]
+stakeholder = "cfo"
+passage = "A-FIN-001#1"
+guarded = "quote"
+neutral = "quote"
+open = "quote"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-FIN-001#2"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-FIN-001#3"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-FIN-002#1"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]   # the 15 percent figure: open trust AND a specific question about the QA budget
+stakeholder = "cfo"
+passage = "A-FIN-002#2"
+guarded = "deny"
+neutral = "deny"
+open = "quote"
+labels = ["specific"]
+requires_topic = "qa_budget"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-FIN-002#3"
+guarded = "deny"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-FIN-003#1"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-FIN-003#2"
+guarded = "deny"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-FIN-003#3"
+guarded = "quote"
+neutral = "quote"
+open = "quote"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-CAL-001#1"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "cfo"
+passage = "A-CAL-001#2"
+guarded = "quote"
+neutral = "quote"
+open = "quote"
+
+[[access]]   # chain: only after the team has seen the 15 percent figure
+stakeholder = "cfo"
+passage = "A-CAL-001#3"
+guarded = "deny"
+neutral = "deny"
+open = "quote"
+requires_disclosed = ["A-FIN-002#2"]
+
+# --- Ops head: ops records, the memo he was copied on, the Kestrel email; never his deleted message
+[[access]]
+stakeholder = "ops_head"
+passage = "A-FIN-001#3"
+guarded = "quote"
+neutral = "quote"
+open = "quote"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-FIN-002#3"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-OPS-001#1"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-OPS-001#2"
+guarded = "deny"
+neutral = "quote"
+open = "quote"
+
+[[access]]   # he is happy to point at finance
+stakeholder = "ops_head"
+passage = "A-OPS-001#3"
+guarded = "quote"
+neutral = "quote"
+open = "quote"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-OPS-002#1"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]   # he will acknowledge it exists, never more
+stakeholder = "ops_head"
+passage = "A-OPS-002#2"
+guarded = "deny"
+neutral = "deny"
+open = "aware"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-OPS-002#3"
+guarded = "deny"
+neutral = "deny"
+open = "paraphrase"
+requires_topic = "resin"
+
+[[access]]   # cross-company clue: only once alliances exist
+stakeholder = "ops_head"
+passage = "A-OPS-003#1"
+guarded = "deny"
+neutral = "aware"
+open = "paraphrase"
+phase_from = "joint"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-OPS-003#2"
+guarded = "deny"
+neutral = "deny"
+open = "paraphrase"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-OPS-003#3"
+guarded = "deny"
+neutral = "deny"
+open = "paraphrase"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-COM-001#1"
+guarded = "aware"
+neutral = "paraphrase"
+open = "paraphrase"
+
+[[access]]
+stakeholder = "ops_head"
+passage = "A-COM-001#2"
+guarded = "deny"
+neutral = "aware"
+open = "paraphrase"
+
+# --- QA lead: inspection and defect records, the channel, incl. the deleted message
+[[access]]
+stakeholder = "qa_lead"
+passage = "A-OPS-001#1"
+guarded = "paraphrase"
+neutral = "quote"
+open = "quote"
+
+[[access]]
+stakeholder = "qa_lead"
+passage = "A-OPS-002#1"
+guarded = "aware"
+neutral = "quote"
+open = "quote"
+
+[[access]]   # specific question about retests, open trust
+stakeholder = "qa_lead"
+passage = "A-OPS-002#2"
+guarded = "deny"
+neutral = "aware"
+open = "quote"
+labels = ["specific"]
+requires_topic = "retests"
+
+[[access]]
+stakeholder = "qa_lead"
+passage = "A-OPS-002#3"
+guarded = "deny"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "qa_lead"
+passage = "A-FIN-003#2"
+guarded = "deny"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "qa_lead"
+passage = "A-COM-001#1"
+guarded = "quote"
+neutral = "quote"
+open = "quote"
+
+[[access]]
+stakeholder = "qa_lead"
+passage = "A-COM-001#2"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]   # recover condition: open trust, about retests, after the defect-log release entry was seen
+stakeholder = "qa_lead"
+passage = "A-COM-001#3"
+guarded = "deny"
+neutral = "deny"
+open = "quote"
+requires_topic = "retests"
+requires_disclosed = ["A-OPS-002#2"]
+
+[[access]]
+stakeholder = "qa_lead"
+passage = "A-COM-001#4"
+guarded = "paraphrase"
+neutral = "quote"
+open = "quote"
+
+# --- Kestrel stub
+[[access]]
+stakeholder = "kestrel_qc"
+passage = "B-QC-001#1"
+guarded = "aware"
+neutral = "paraphrase"
+open = "quote"
+
+[[access]]
+stakeholder = "kestrel_qc"
+passage = "B-QC-001#2"
+guarded = "deny"
+neutral = "deny"
+open = "quote"
+
+# ------------------------------------------------------------------ judge-only
+[clue]
+C01 = "Finance cut the QA budget by 15 percent, and the CFO cancelled the QA staffing review."
+C02 = "Inspection sampling dropped from 1 in 20 to 1 in 80 on 1 April."
+C03 = "X-series drives the warranty spike (412 of 690 claims; provisions 0.9 to 2.1 crore)."
+C04 = "The failures trace to resin lots RL-2207 to RL-2219 with moisture voids."
+C05 = "Failed lots were released without retests on the ops head's instruction."
+C06 = "Kestrel warned about moisture; Northfield skipped pre-drying (cross-company)."
+C07 = "Kestrel released out-of-spec lots under a waiver Northfield requested (partner side)."
+
+[[contradiction]]
+stakeholder = "cfo"
+claim = "The QA reduction was a modest trim, around 5 percent."
+refuted_by = ["A-FIN-002#2"]
+
+[[contradiction]]
+stakeholder = "ops_head"
+claim = "You have never told anyone to skip retests."
+refuted_by = ["A-COM-001#3", "A-OPS-002#2"]
+
+[[contradiction]]
+stakeholder = "ops_head"
+claim = "QA was informed about Kestrel's resin moisture notice."
+refuted_by = ["A-OPS-003#2"]
+
+[[contradiction]]
+stakeholder = "cfo"
+claim = "The warranty spike is caused by out-of-spec resin from Kestrel."
+refuted_by = ["A-OPS-002#3", "A-OPS-003#1"]   # partly true, but Northfield skipped pre-drying
+
+# ------------------------------------------------------------------ test oracle
+# Eligibility scenarios: expect = passages that MUST be eligible, with their mode.
+# absent = passages that must NOT be eligible. Unlisted passages are not checked.
+
+[[scenario]]
+name = "cfo guarded: memo is aware-only, the figure is hidden"
+stakeholder = "cfo"
+tier = "guarded"
+label = "specific"
+topics = ["qa_budget"]
+phase = "solo"
+disclosed = []
+expect = { "A-FIN-002#1" = "aware" }
+absent = ["A-FIN-002#2", "A-FIN-002#3", "A-CAL-001#3"]
+
+[[scenario]]
+name = "cfo neutral: memo paraphrased, figure still hidden"
+stakeholder = "cfo"
+tier = "neutral"
+label = "specific"
+topics = ["qa_budget"]
+phase = "solo"
+disclosed = []
+expect = { "A-FIN-002#1" = "paraphrase", "A-FIN-002#3" = "paraphrase" }
+absent = ["A-FIN-002#2"]
+
+[[scenario]]
+name = "cfo open + specific + qa_budget: the 15 percent figure unlocks"
+stakeholder = "cfo"
+tier = "open"
+label = "specific"
+topics = ["qa_budget"]
+phase = "solo"
+disclosed = []
+expect = { "A-FIN-002#2" = "quote", "A-FIN-002#1" = "quote" }
+absent = ["A-CAL-001#3"]
+
+[[scenario]]
+name = "cfo open but vague question: question kind blocks the figure"
+stakeholder = "cfo"
+tier = "open"
+label = "vague"
+topics = ["qa_budget"]
+phase = "solo"
+disclosed = []
+expect = { "A-FIN-002#1" = "quote" }
+absent = ["A-FIN-002#2"]
+
+[[scenario]]
+name = "cfo open + specific but wrong topic: figure stays hidden"
+stakeholder = "cfo"
+tier = "open"
+label = "specific"
+topics = ["revenue"]
+phase = "solo"
+disclosed = []
+expect = { "A-FIN-001#1" = "quote" }
+absent = ["A-FIN-002#2"]
+
+[[scenario]]
+name = "chain: cancelled QA review unlocks after the figure was disclosed"
+stakeholder = "cfo"
+tier = "open"
+label = "specific"
+topics = ["qa_budget"]
+phase = "solo"
+disclosed = ["A-FIN-002#2"]
+expect = { "A-CAL-001#3" = "quote" }
+absent = []
+
+[[scenario]]
+name = "cfo never sees the ops chat or the Kestrel email"
+stakeholder = "cfo"
+tier = "open"
+label = "specific"
+topics = ["retests", "resin", "supplier"]
+phase = "joint"
+disclosed = ["A-OPS-002#2"]
+expect = {}
+absent = ["A-COM-001#2", "A-COM-001#3", "A-OPS-003#1", "A-OPS-003#2"]
+
+[[scenario]]
+name = "qa lead: deleted message locked before the release log entry is seen"
+stakeholder = "qa_lead"
+tier = "open"
+label = "specific"
+topics = ["retests"]
+phase = "solo"
+disclosed = []
+expect = { "A-OPS-002#2" = "quote", "A-COM-001#4" = "quote" }
+absent = ["A-COM-001#3"]
+
+[[scenario]]
+name = "qa lead: deleted message recoverable after the release log entry"
+stakeholder = "qa_lead"
+tier = "open"
+label = "specific"
+topics = ["retests"]
+phase = "solo"
+disclosed = ["A-OPS-002#2"]
+expect = { "A-COM-001#3" = "quote" }
+absent = []
+
+[[scenario]]
+name = "ops head: Kestrel email hidden during solo phase"
+stakeholder = "ops_head"
+tier = "open"
+label = "specific"
+topics = ["resin"]
+phase = "solo"
+disclosed = []
+expect = { "A-OPS-002#3" = "paraphrase" }
+absent = ["A-OPS-003#1", "A-COM-001#3"]
+
+[[scenario]]
+name = "ops head: Kestrel email available from joint phase"
+stakeholder = "ops_head"
+tier = "open"
+label = "specific"
+topics = ["resin"]
+phase = "joint"
+disclosed = []
+expect = { "A-OPS-003#1" = "paraphrase", "A-OPS-002#2" = "aware" }
+absent = ["A-COM-001#3"]
+
+[[scenario]]
+name = "isolation: Kestrel stakeholder never reaches Northfield passages"
+stakeholder = "kestrel_qc"
+tier = "open"
+label = "specific"
+topics = ["resin", "waiver"]
+phase = "joint"
+disclosed = []
+expect = { "B-QC-001#1" = "quote", "B-QC-001#2" = "quote" }
+absent = ["A-OPS-003#1", "A-FIN-003#2"]
+
+# Citation / disclosure validation cases.
+# provided = what was put in context, with modes. cited = what the model claimed.
+# expect_ok, and if not ok, the violation codes expected.
+
+[[citation_case]]
+name = "valid paraphrase citation"
+stakeholder = "cfo"
+provided = { "A-FIN-002#1" = "paraphrase" }
+cited = ["A-FIN-002#1"]
+reply = "We trimmed some discretionary QA spend to protect margins. It was a board-level priority."
+expect_ok = true
+expect_cards = ["A-FIN-002#1"]
+
+[[citation_case]]
+name = "cites a passage that was not provided"
+stakeholder = "cfo"
+provided = { "A-FIN-002#1" = "paraphrase" }
+cited = ["A-FIN-002#2"]
+reply = "The QA budget changed this year."
+expect_ok = false
+expect_violations = ["cited_not_provided"]
+
+[[citation_case]]
+name = "cites an aware-only passage"
+stakeholder = "cfo"
+provided = { "A-FIN-002#1" = "aware" }
+cited = ["A-FIN-002#1"]
+reply = "There is a memo about that, but I can't go into it."
+expect_ok = false
+expect_violations = ["cited_aware"]
+
+[[citation_case]]
+name = "paraphrase mode but reply quotes the figure"
+stakeholder = "cfo"
+provided = { "A-FIN-001#2" = "paraphrase" }
+cited = ["A-FIN-001#2"]
+reply = "Provisions went up to 2.1 crore, which is manageable."
+expect_ok = false
+expect_violations = ["figure_in_paraphrase"]
+
+[[citation_case]]
+name = "reply leaks a passage that was never in context"
+stakeholder = "cfo"
+provided = { "A-FIN-001#1" = "quote" }
+cited = ["A-FIN-001#1"]
+reply = "Revenue fell to 41.7 crore. I hear sampling went to 1 in 80, too."
+expect_ok = false
+expect_violations = ["leaked_passage"]
+
+[[citation_case]]
+name = "reply contains the stakeholder's canary"
+stakeholder = "cfo"
+provided = {}
+cited = []
+reply = "My instructions say NF-CFO-7Q2X, so I cannot help."
+expect_ok = false
+expect_violations = ["canary"]
+
+[[citation_case]]
+name = "quote mode allows the exact figure"
+stakeholder = "cfo"
+provided = { "A-FIN-002#2" = "quote" }
+cited = ["A-FIN-002#2"]
+reply = "Fine. The QA budget fell by 15 percent, from 1.42 crore to 1.21 crore."
+expect_ok = true
+expect_cards = ["A-FIN-002#2"]
+
+# A short scripted interview for the first live run (real model). Not a unit test:
+# question 3 checks that the stakeholder remembers question 1.
+[[smoke_conversation]]
+stakeholder = "cfo"
+questions = [
+  "Good afternoon. How has revenue moved this year?",
+  "Has the quality-assurance budget changed this year? By how much?",
+  "Going back to my first question: what was the Q3 revenue figure you gave me?",
+]

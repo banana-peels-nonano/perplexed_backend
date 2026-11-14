@@ -1,0 +1,32 @@
+# Local development database for the PERPLEXED backend.
+# Start:  sudo docker compose up -d
+# Check:  sudo docker compose ps        (STATUS should say "healthy")
+# Stop:   sudo docker compose down      (data is kept in the named volume)
+# Wipe:   sudo docker compose down -v   (deletes the volume = deletes all data)
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: perplexed
+      POSTGRES_DB: perplexed
+      # Compose reads this from the .env file next to this compose.yaml.
+      # The ":?" makes startup fail loudly if you forgot to set it.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      # 127.0.0.1 = reachable only from this machine.
+      # Docker-published ports bypass ufw, so never publish as "5432:5432".
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # SQL files here run once, on the very first start with an empty volume.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U perplexed -d perplexed"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

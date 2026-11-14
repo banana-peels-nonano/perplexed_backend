@@ -2,8 +2,14 @@
 
 Eligibility already decided what may be revealed; this only decides what's relevant.
 Deterministic and explainable:
-  score = 10 x (topics shared with the question) + 3 if cited in the last two turns
-Passages that share no topic and weren't just discussed are left out entirely.
+  question has topics:  score = 10 x (topics shared with the question), +3 if also cited
+                        in the last two turns (a tie-break, never a ticket in)
+  question has none:    score = 3 if cited in the last two turns ("say more about that?")
+Passages with score 0 are left out entirely.
+
+Step 7, 10-question run: the old rule (+3 always) carried every earlier passage into every
+later question, and at open trust the CFO re-told the cancelled staffing review in four
+answers running, whatever was asked.
 Highest score first (ties: higher mode, then id), until the token budget or passage cap.
 """
 
@@ -34,7 +40,10 @@ def rank_passages(
     scored = []
     for pid, mode in eligible.items():
         overlap = len(topics & set(case.passage[pid].topics))
-        score = 10 * overlap + (3 if pid in recent else 0)
+        if topics:
+            score = 10 * overlap + (3 if overlap and pid in recent else 0)
+        else:
+            score = 3 if pid in recent else 0
         if score > 0:
             scored.append((-score, -int(mode), pid))
     chosen: list[str] = []

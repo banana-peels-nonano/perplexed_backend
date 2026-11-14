@@ -6,11 +6,13 @@ from app.content.loader import load_case
 from app.content.schema import Mode, Tier
 from app.interview.eligibility import eligible_passages, question_context
 from app.interview.prompt import (
+    ATTITUDE,
     answer_schema,
     build_answer_prompt,
     build_classifier_prompt,
     build_system,
     classifier_schema,
+    paraphrase_text,
 )
 from app.interview.ranking import rank_passages
 
@@ -108,6 +110,42 @@ def test_recently_cited_passages_stay_in_play_for_follow_ups():
     assert ranked == ["A-FIN-002#1"]
 
 
+def test_recently_cited_passages_do_not_ride_along_on_a_new_topic():
+    # step 7: the cancelled staffing review followed the CFO into every later answer
+    q = question_context(stakeholder="cfo", tier="open", label="specific",
+                         topics=["board"], phase="solo")  # fmt: skip
+    eligible = eligible_passages(CASE, q)
+    ranked = rank_passages(
+        CASE, eligible, ["board"], ["A-FIN-002#1", "A-FIN-001#1"], budget_tokens=1200,
+        max_passages=4,
+    )  # fmt: skip
+    assert ranked and all("board" in CASE.passage[p].topics for p in ranked)
+
+
+def test_paraphrase_evidence_arrives_with_its_figures_withheld():
+    assert paraphrase_text(CASE, "A-FIN-002#1").endswith(
+        "protect the [withheld] operating margin target."
+    )
+    ledger = paraphrase_text(CASE, "A-FIN-003#2")
+    assert "RL-2207" not in ledger and "[withheld] through RL-2219" in ledger  # only the print
+    provisions = paraphrase_text(CASE, "A-FIN-001#2")
+    assert "2.1 crore" not in provisions and "0.9 crore" in provisions
+    assert "absorbed by Operations" in paraphrase_text(CASE, "A-FIN-002#3")  # phrase: kept
+    prompt = build_answer_prompt(
+        CASE, "cfo", tier=Tier.neutral, history=[], question="Why was QA cut?",
+        evidence=[("A-FIN-002#1", Mode.paraphrase), ("A-FIN-001#1", Mode.quote)],
+    )  # fmt: skip
+    assert "9 percent" not in prompt.final_user and "[withheld]" in prompt.final_user
+    assert "41.7 crore" in prompt.final_user  # quote mode: figures stay
+
+
+def test_rules_forbid_confirming_leading_questions_and_narrating_trust():
+    system = build_system(CASE, "cfo")
+    assert "confirm or deny something that is not in your evidence" in system
+    assert "how much you trust them" in system
+    assert "trust this team" not in "".join(ATTITUDE.values())
+
+
 def test_answer_schema_is_stable_per_stakeholder_and_limited_to_its_citable_passages():
     # step 7: a per-turn enum broke prompt caching, so the schema must not depend on the turn
     enum = answer_schema(CASE, "cfo")["properties"]["cited"]["items"]["enum"]
@@ -126,7 +164,8 @@ def test_system_prompt_names_real_colleagues_only():
     assert "Ritu Malhotra, Chief" in system  # herself, in WHO YOU ARE
     assert "Daniel Okafor" not in system  # the other company's stakeholder
     assert system == build_system(CASE, "cfo")  # still identical every turn -> cacheable
-    assert "Never offer to send" in system  # step 7: she kept offering to send the pack
+    assert "offer to send, share, forward or show a document" in system  # step 7
+    assert "tell them to check" in system  # ...and told them to "check it there"
 
 
 def test_classifier_sees_no_evidence_and_only_company_topics():

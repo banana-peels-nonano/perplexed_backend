@@ -859,3 +859,18 @@ questions = [
   "Has the quality-assurance budget changed this year? By how much?",
   "Going back to my first question: what was the Q3 revenue figure you gave me?",
 ]
+
+[[smoke_conversation]]   # long: a full quota against one stakeholder; ends on the memory check
+stakeholder = "cfo"
+questions = [
+  "Good afternoon. How has revenue moved this year?",
+  "What is driving the rise in warranty costs?",
+  "Which product line accounts for most of the warranty claims?",
+  "Has the quality-assurance budget changed this year? By how much?",
+  "Who signed off on that change, and what was the reasoning?",
+  "Do you think the resin from Kestrel is to blame for the failures?",
+  "Is there a QA staffing review on your calendar?",
+  "What is on the agenda for the board pre-read?",
+  "Are you meeting Kestrel about pricing any time soon?",
+  "Going back to my first question: what was the Q3 revenue figure you gave me?",
+]

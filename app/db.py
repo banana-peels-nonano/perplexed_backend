@@ -58,3 +58,10 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     """
     async with get_sessionmaker()() as session:
         yield session
+
+
+def session_factory() -> async_sessionmaker[AsyncSession]:
+    """FastAPI dependency for code that needs SEVERAL short transactions in one request
+    (the interview: reserve -> call the model with no connection held -> save).
+    Tests replace it to point at the test database."""
+    return get_sessionmaker()

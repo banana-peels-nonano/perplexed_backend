@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from alembic import command
 from app.config import get_settings
-from app.db import get_session, make_engine, make_sessionmaker
+from app.db import get_session, make_engine, make_sessionmaker, session_factory
+from app.llm.fake import FakeProvider
 from app.main import create_app
 from app.models import Base
 from app.seed import run_seed
@@ -81,18 +82,26 @@ async def db(engine: AsyncEngine, test_db_url: str) -> AsyncIterator[AsyncEngine
 async def seeded(db: AsyncEngine) -> dict[str, str]:
     """Fixture case loaded, one team per company. Returns {team code: access code}."""
     async with make_sessionmaker(db)() as session, session.begin():
-        report = await run_seed(session, FIXTURE, teams_per_company=1)
+        report = await run_seed(session, FIXTURE, teams_per_company=1, start_phase_key="solo")
     return report.new_codes
 
 
 @pytest.fixture
-async def make_client(db: AsyncEngine) -> AsyncIterator[Callable[[], httpx.AsyncClient]]:
+def fake() -> FakeProvider:
+    """The model every test app uses. Tests script it: fake.queues["answer"].append({...})."""
+    return FakeProvider()
+
+
+@pytest.fixture
+async def make_client(
+    db: AsyncEngine, fake: FakeProvider
+) -> AsyncIterator[Callable[[], httpx.AsyncClient]]:
     """Factory for HTTP clients that talk to the app in-process (no server, no network).
 
     Each client is like a separate laptop: its own cookie jar. Every request's database
     session comes from the test database instead of DATABASE_URL.
     """
-    app = create_app()
+    app = create_app(provider=fake)
     maker = make_sessionmaker(db)
 
     async def _test_session():
@@ -100,6 +109,7 @@ async def make_client(db: AsyncEngine) -> AsyncIterator[Callable[[], httpx.Async
             yield session
 
     app.dependency_overrides[get_session] = _test_session
+    app.dependency_overrides[session_factory] = lambda: maker
     clients: list[httpx.AsyncClient] = []
 
     def _make() -> httpx.AsyncClient:

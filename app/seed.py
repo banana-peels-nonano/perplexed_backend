@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -184,7 +184,8 @@ async def ensure_event(session: AsyncSession, case: Case, name: str) -> Event:
     event = await session.scalar(select(Event).where(Event.case_id == case.case_id))
     if event is not None:
         return event
-    event = Event(name=name, case_id=case.case_id, config=DEFAULT_EVENT_CONFIG)
+    config = {**DEFAULT_EVENT_CONFIG, "labels": list(case.labels)}
+    event = Event(name=name, case_id=case.case_id, config=config)
     session.add(event)
     await session.flush()  # sends the INSERT so event.id is filled in
     for seq, key in enumerate(case.phases):
@@ -263,6 +264,24 @@ async def ensure_team_state(session: AsyncSession, team: Team, config: dict) -> 
     await session.execute(stmt.on_conflict_do_nothing(index_elements=["team_id", "stakeholder_id"]))
 
 
+async def start_phase(session: AsyncSession, event: Event, key: str) -> None:
+    """Dev/test shortcut until the organiser phase controls exist (M2): make `key` the
+    running phase. Any other running or paused phase goes back to 'scheduled'."""
+    keys = (await session.scalars(select(Phase.key).where(Phase.event_id == event.id))).all()
+    if key not in keys:
+        raise SystemExit(f"unknown phase {key!r}; choose from {list(keys)}")
+    await session.execute(
+        update(Phase)
+        .where(Phase.event_id == event.id, Phase.status.in_(["running", "paused"]))
+        .values(status="scheduled", started_at=None)
+    )
+    await session.execute(
+        update(Phase)
+        .where(Phase.event_id == event.id, Phase.key == key)
+        .values(status="running", started_at=func.now())
+    )
+
+
 async def count_rows(session: AsyncSession) -> dict[str, int]:
     models = [
         Company,
@@ -286,6 +305,7 @@ async def run_seed(
     teams_per_company: int = 0,
     event_name: str = "PERPLEXED dev",
     rotate_codes: bool = False,
+    start_phase_key: str | None = None,
 ) -> SeedReport:
     case = load_case(case_path)
     report = SeedReport()
@@ -295,6 +315,8 @@ async def run_seed(
         report.new_codes, report.existing_teams = await ensure_teams(
             session, event, list(case.company), teams_per_company, rotate_codes
         )
+    if start_phase_key:
+        await start_phase(session, event, start_phase_key)
     report.counts = await count_rows(session)
     return report
 
@@ -305,7 +327,12 @@ async def _main(args: argparse.Namespace) -> None:
         async with make_sessionmaker(engine)() as session, session.begin():
             # session.begin(): everything above commits together, or nothing does
             report = await run_seed(
-                session, args.case, args.teams_per_company, args.event_name, args.rotate_codes
+                session,
+                args.case,
+                args.teams_per_company,
+                args.event_name,
+                args.rotate_codes,
+                args.start_phase,
             )
     finally:
         await engine.dispose()
@@ -316,6 +343,8 @@ async def _main(args: argparse.Namespace) -> None:
         print("\nACCESS CODES (shown once; only their hashes are stored):")
         for team, code in report.new_codes.items():
             print(f"  {team}  {code}")
+    if args.start_phase:
+        print(f"\nphase {args.start_phase!r} is now running")
     if report.existing_teams:
         print(
             f"\nexisting teams kept their codes: {', '.join(report.existing_teams)}"
@@ -329,6 +358,7 @@ def main() -> None:
     p.add_argument("--teams-per-company", type=int, default=0)
     p.add_argument("--event-name", default="PERPLEXED dev")
     p.add_argument("--rotate-codes", action="store_true", help="issue new codes to existing teams")
+    p.add_argument("--start-phase", help="dev only: make this phase running, e.g. solo")
     asyncio.run(_main(p.parse_args()))
 
 

@@ -25,6 +25,12 @@ def _test_database_url() -> str:
 
 
 @pytest.fixture
+def test_db_url() -> str:
+    """The checked test database URL, for tests that build their own connections."""
+    return _test_database_url()
+
+
+@pytest.fixture
 async def engine() -> AsyncIterator[AsyncEngine]:
     # One engine per test: each test gets its own event loop (our pytest-asyncio setting),
     # and asyncpg connections cannot be shared across loops.

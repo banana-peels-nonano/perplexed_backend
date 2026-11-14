@@ -80,3 +80,21 @@ KESTREL_Q = "Do you think the resin from Kestrel is to blame for the failures?"
 )
 def test_used_but_uncited(provided, cited, reply, question, added):
     assert used_but_uncited(CASE, provided, cited, reply, question) == added
+
+
+@pytest.mark.parametrize(
+    "question, reply, flagged",
+    [
+        # step 8: correcting the team's wrong number is fine...
+        ("Q3 revenue came in at 39 crore, correct?", "Not 39 crore; it was lower.", []),
+        # ...but repeating a number from the question that is a hidden fact is not
+        ("Was the review on 16 May?", "Yes, on 16 May.", ["16"]),
+        ("Was the cut 15 percent?", "Yes, 15 percent.", ["15"]),
+        # and echoing the team's own name for someone reveals nothing
+        ("What has Daniel Okafor told you?", "I haven't spoken to Daniel Okafor.", []),
+    ],
+)
+def test_the_question_grounds_its_own_numbers_unless_they_are_hidden_facts(
+    question, reply, flagged
+):
+    assert ungrounded_facts(CASE, "cfo", {}, "", reply, question) == flagged

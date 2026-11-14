@@ -3,6 +3,7 @@
 No database, no network, no model: these run in milliseconds and should never be skipped.
 """
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -114,3 +115,19 @@ def test_spelled_out_paraphrase_figure_is_blocked():
     reply = "I approved it to protect our nine percent operating margin target."
     result = check_reply(CASE, "cfo", provided, ["A-FIN-002#1"], reply)
     assert not result.ok and "figure_in_paraphrase" in result.violations
+
+
+def test_loader_rejects_paraphrase_traps():
+    # step 8: phrase fingerprints in paraphrase mode caused regenerations and deflections
+    data = tomllib.loads(FIXTURE.read_text())
+    del data["passage"]["A-COM-001#2"]["paraphrase"]
+    with pytest.raises(ValueError, match="A-COM-001#2: can be paraphrased"):
+        Case.model_validate(data)
+    data = tomllib.loads(FIXTURE.read_text())
+    data["passage"]["A-COM-001#2"]["paraphrase"] = "We hit the June shipment target first."
+    with pytest.raises(ValueError, match="paraphrase contains its fingerprint"):
+        Case.model_validate(data)
+    data = tomllib.loads(FIXTURE.read_text())
+    data["stakeholder"]["qa_lead"]["persona"] += " Remembers the June shipment target."
+    with pytest.raises(ValueError, match="persona/beliefs contain A-COM-001#2"):
+        Case.model_validate(data)

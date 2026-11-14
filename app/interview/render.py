@@ -1,7 +1,8 @@
 """What a passage looks like at a given mode: one rendering for the model AND the card.
 
   quote       the authentic text, unchanged.
-  paraphrase  the authentic text with every figure, code, date and time [withheld]
+  paraphrase  the author's `paraphrase` if the case has one, else the authentic text;
+              either way every figure, code, date and time [withheld]
               (quarter labels like Q1 stay, they are context, not facts).
   aware/deny  no text at all; callers never ask for it.
 
@@ -32,9 +33,12 @@ _KEEP = re.compile(r"^(?:Q[1-4]|H[12])$", re.IGNORECASE)
 
 
 def render(case: Case, passage_id: str, mode: Mode) -> str:
-    text = case.passage[passage_id].text
+    passage = case.passage[passage_id]
     if mode == Mode.quote:
-        return text
+        return passage.text
     if mode == Mode.paraphrase:
+        # the author's paraphrase when there is one (step 8: phrase fingerprints like
+        # "June shipment target" survived blanking and caused regenerations/deflections)
+        text = passage.paraphrase or passage.text
         return _FIGURE.sub(lambda m: m[0] if _KEEP.match(m[0]) else WITHHELD, text)
     raise ValueError(f"{passage_id}: a {mode.name} passage has no text to show")

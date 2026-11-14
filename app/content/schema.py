@@ -65,6 +65,9 @@ class Passage(_Strict):
     record: str
     topics: list[str]
     text: str
+    # what a paraphrase-mode stakeholder sees (and the card shows) instead of `text`;
+    # required when the passage can be paraphrased and has a phrase fingerprint
+    paraphrase: str | None = None
     fingerprints: list[str] = []
     deleted: bool = False
     # judge-only: never sent to a model or a participant
@@ -199,6 +202,37 @@ class Case(_Strict):
                 errors.append(f"access {key}: unknown labels {a.labels}")
             if a.phase_from and a.phase_from not in self.phases:
                 errors.append(f"access {key}: unknown phase {a.phase_from}")
+        errors += self._paraphrase_and_persona_errors()
         if errors:
             raise ValueError("invalid case:\n  " + "\n  ".join(errors))
         return self
+
+    def _paraphrase_and_persona_errors(self) -> list[str]:
+        """Authoring mistakes that would make the leak check fire on every answer (step 8)."""
+        from app.interview.text import mentions  # pure text helpers; no app state
+
+        errors = []
+        paraphrased = {
+            a.passage
+            for a in self.access
+            if a.passage in self.passage and any(a.mode_at(t) == Mode.paraphrase for t in Tier)
+        }
+        for pid, p in self.passage.items():
+            for fp in p.fingerprints:
+                if p.paraphrase and mentions(p.paraphrase, fp):
+                    errors.append(f"passage {pid}: paraphrase contains its fingerprint {fp!r}")
+            phrases = [f for f in p.fingerprints if not any(ch.isdigit() for ch in f)]
+            if pid in paraphrased and phrases and not p.paraphrase:
+                errors.append(
+                    f"passage {pid}: can be paraphrased and has phrase fingerprints {phrases}; "
+                    "write a `paraphrase` (figures are withheld automatically, phrases are not)"
+                )
+        for sid, s in self.stakeholder.items():
+            own = " ".join([s.persona, *s.beliefs])
+            for pid, p in self.passage.items():
+                if pid in self.passage and self.company_of_passage(pid) == s.company:
+                    for fp in p.fingerprints:
+                        if mentions(own, fp):
+                            errors.append(f"stakeholder {sid}: persona/beliefs contain {pid}'s "
+                                          f"fingerprint {fp!r}")  # fmt: skip
+        return errors

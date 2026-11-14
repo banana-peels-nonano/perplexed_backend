@@ -96,6 +96,7 @@ async def load_case_from_db(session: AsyncSession) -> Case:
                 "record": p.record_id,
                 "topics": p.topics,
                 "text": p.text,
+                "paraphrase": p.paraphrase,
                 "fingerprints": p.fingerprints,
                 "deleted": p.deleted,
             }  # clue_id and truth intentionally left out

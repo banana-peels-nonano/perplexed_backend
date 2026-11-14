@@ -141,6 +141,8 @@ title = "Lot release record RL-2207 to RL-2219"
 date = "2026-04-18"
 
 # ------------------------------------------------------------------ passages
+# paraphrase: what a paraphrase-mode stakeholder sees instead of `text` (figures are
+#   withheld automatically; required when a fingerprint is a phrase, not a figure)
 # fingerprints: distinctive strings whose appearance in a reply proves the passage
 # leaked (used by output validation). Keep them specific enough not to collide.
 
@@ -185,6 +187,7 @@ clue = "C01"
 record = "A-FIN-002"
 topics = ["qa_budget", "inspection"]
 text = "Copied to: A. Rao (Operations). Inspection headcount reductions to be absorbed by Operations as it sees fit."
+paraphrase = "The memo was copied to the head of operations, and left it to operations to decide how to cope with fewer inspection staff."
 fingerprints = ["absorbed by Operations"]
 truth = "true"
 
@@ -253,6 +256,7 @@ clue = "C05"
 record = "A-OPS-002"
 topics = ["resin", "inspection"]
 text = "Pre-drying of resin before moulding was skipped for the X-series from April, after the drying ovens were reassigned to the new line."
+paraphrase = "Resin stopped being pre-dried before moulding on the X-series in the spring, once the drying equipment was moved to another line."
 fingerprints = ["drying ovens were reassigned"]
 truth = "true"
 clue = "C06"
@@ -269,6 +273,7 @@ clue = "C06"
 record = "A-OPS-003"
 topics = ["supplier", "resin"]
 text = "The notice was forwarded internally to A. Rao only. No acknowledgement to Kestrel is on file."
+paraphrase = "The supplier's notice went to one person in operations and no further. Nothing shows the supplier was ever answered."
 fingerprints = ["forwarded internally to A. Rao only"]
 truth = "true"
 
@@ -276,6 +281,7 @@ truth = "true"
 record = "A-OPS-003"
 topics = ["supplier", "shipments"]
 text = "Kestrel follow-up on 20 May: 'No response received. Please confirm handling of the affected lots.'"
+paraphrase = "Kestrel chased later in May, saying they had heard nothing back and asking how the affected lots were being handled."
 fingerprints = ["No response received"]
 truth = "true"
 
@@ -290,6 +296,7 @@ truth = "true"
 record = "A-COM-001"
 topics = ["shipments", "inspection"]
 text = "Arjun Rao: We hit the June shipment target first. Sampling stays where it is."
+paraphrase = "Arjun replied that hitting the shipment target came first and the sampling rate would not change."
 fingerprints = ["June shipment target"]
 truth = "true"
 
@@ -306,6 +313,7 @@ clue = "C05"
 record = "A-COM-001"
 topics = ["retests"]
 text = "Meera Iyer: Logging my objection here. I am not signing off on lots that failed retest."
+paraphrase = "Meera put her objection on record and refused to sign off lots that had failed retest."
 fingerprints = ["Logging my objection"]
 truth = "true"
 
@@ -313,6 +321,7 @@ truth = "true"
 record = "A-CAL-001"
 topics = ["partner_pricing", "supplier"]
 text = "Tue 13 May, 15:00: Kestrel pricing renegotiation, with Kestrel CFO."
+paraphrase = "A pricing meeting with Kestrel's CFO is in the calendar that week."
 fingerprints = ["Kestrel pricing renegotiation"]
 truth = "true"
 

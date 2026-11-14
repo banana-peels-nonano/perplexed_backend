@@ -44,7 +44,17 @@ from app.models import LlmCall, Message, Phase, TeamDisclosure, TeamStakeholderS
 log = logging.getLogger(__name__)
 
 TSS = TeamStakeholderState
-DEFLECTION = "I'd rather not get into that right now. Is there something else I can help with?"
+# Used when both drafts fail the checks. Several plain non-answers, not one stock line:
+# step 8 showed deflections happen almost only where something is hidden, so one fixed
+# sentence would tell teams "you just hit a secret". These read like an ordinary "don't
+# know", which stakeholders also give when nothing is there.
+DEFLECTIONS = (
+    "I don't recall the details of that, I'm afraid.",
+    "That's not something I can speak to.",
+    "I'd have to think about that; I don't have it to hand.",
+    "I'm not the right person to answer that.",
+    "I can't help you there, sorry.",
+)
 REMINDER = (
     "\n\nBefore you answer: use only the evidence above; in paraphrase mode give no exact "
     "figures, names or phrases; never repeat internal markers; cite only ids in <evidence>."
@@ -56,8 +66,9 @@ class EvidenceCard:
     passage_id: str
     record_id: str
     record_title: str
-    excerpt: str  # authentic text, never the model's wording
-    new: bool  # first time this team has been shown it
+    excerpt: str  # the case's text at `mode` (render.py), never the model's wording
+    new: bool  # first time this team has been shown it (or upgraded to quote)
+    mode: str = "quote"  # 'quote' | 'paraphrase': the UI can label paraphrased cards
 
 
 @dataclass(frozen=True)
@@ -83,7 +94,8 @@ def _card(case: Case, pid: str, mode: Mode, new: bool) -> EvidenceCard:
     """`mode` is the best the team has unlocked for this passage: a card never shows more
     than the stakeholder was allowed to say (render.py)."""
     p = case.passage[pid]
-    return EvidenceCard(pid, p.record, case.record[p.record].title, render(case, pid, mode), new)
+    title = case.record[p.record].title
+    return EvidenceCard(pid, p.record, title, render(case, pid, mode), new, mode.name)
 
 
 def _thread(team: TeamContext, stakeholder_id: str):
@@ -289,6 +301,7 @@ async def ask_question(
             recently_cited,
             budget_tokens=config["evidence_token_budget"],
             max_passages=config["max_passages"],
+            question=text,
         )
         evidence: list[tuple[str, Mode]] = [(pid, eligible[pid]) for pid in ranked]
         provided = dict(evidence)
@@ -296,7 +309,8 @@ async def ask_question(
             case, stakeholder_id, tier=tier, history=history, evidence=evidence, question=text
         )
 
-        status, reply, cards = "blocked", DEFLECTION, []
+        deflection = DEFLECTIONS[question_id.int % len(DEFLECTIONS)]
+        status, reply, cards = "blocked", deflection, []
         for attempt in range(2):
             p = (
                 prompt

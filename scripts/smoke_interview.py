@@ -70,6 +70,14 @@ async def prepare(code_team: str, stakeholder: str, reset: bool, trust: int | No
             )
 
 
+async def message_status(answer_id: str) -> str:
+    """'answered' or 'blocked' (a safe deflection). The participant API doesn't say which,
+    on purpose, so dev tools read it from the database."""
+    async with get_sessionmaker()() as s:
+        status = await s.scalar(select(Message.status).where(Message.id == uuid.UUID(answer_id)))
+    return status or "unknown"
+
+
 async def run(args: argparse.Namespace) -> int:
     case = load_case(args.case)
     if not 0 <= args.conversation < len(case.smoke_conversation):
@@ -105,11 +113,13 @@ async def run(args: argparse.Namespace) -> int:
                 answers.append({})
                 continue
             body = r.json()
+            body["status"] = await message_status(body["answer_id"])
             answers.append(body)
             question_ids.append(body["question_id"])
             print(f"A{i} [{body['status']}] {body['answer']}")
             for card in body["evidence"]:
-                flag = "NEW " if card["new"] else ""
+                flag = ("NEW " if card["new"] else "") + ("(paraphrased) " if card["mode"] ==
+                                                          "paraphrase" else "")  # fmt: skip
                 print(f"   evidence {flag}{card['passage_id']} ({card['record_title']}):")
                 print(f"      {card['excerpt']}")
             print(f"   questions remaining: {body['questions_remaining']}")

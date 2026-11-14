@@ -91,6 +91,7 @@ class Passage(Base):
     # copied from the record so isolation filters need no join; the seed checks they agree
     company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), index=True)
     text: Mapped[str] = mapped_column(Text)
+    paraphrase: Mapped[str | None] = mapped_column(Text)
     topics: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=sql_text("'{}'"))
     fingerprints: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=sql_text("'{}'"))
     deleted: Mapped[bool] = mapped_column(Boolean, server_default=sql_text("false"))

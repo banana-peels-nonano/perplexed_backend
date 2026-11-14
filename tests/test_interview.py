@@ -10,6 +10,7 @@ import uuid
 from sqlalchemy import func, select, text
 
 from app.db import make_sessionmaker
+from app.interview.service import DEFLECTIONS
 from app.llm.base import ProviderError
 from app.models import LlmCall, Message, TeamDisclosure
 
@@ -41,6 +42,11 @@ async def _count(db, model, *where):
         return await s.scalar(select(func.count()).select_from(model).where(*where))
 
 
+async def _scalar(db, statement):
+    async with make_sessionmaker(db)() as s:
+        return await s.scalar(statement)
+
+
 async def _sql(db, statement):
     async with db.begin() as conn:
         await conn.execute(text(statement))
@@ -56,7 +62,7 @@ async def test_question_returns_answer_and_authentic_evidence_card(seeded, make_
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["answer"] == "We trimmed some discretionary QA spend."
-    assert body["status"] == "answered"
+    assert "status" not in body  # participants can't tell a deflection from an answer
     assert body["questions_remaining"] == 9
     [card] = body["evidence"]
     assert card["passage_id"] == "A-FIN-002#1" and card["new"] is True
@@ -106,8 +112,10 @@ async def test_leaking_reply_is_regenerated_then_replaced_by_a_deflection(
     fake.queues["answer"] += [leak, leak]  # leaks twice
     client = await _team(make_client, seeded)
     body = (await _ask(client, "cfo", "How much was the QA budget cut?")).json()
-    assert body["status"] == "blocked"
-    assert "15 percent" not in body["answer"]
+    assert "status" not in body  # a deflection must look like any other answer...
+    assert body["answer"] in DEFLECTIONS and "15 percent" not in body["answer"]
+    status = await _scalar(db, select(Message.status).where(Message.role == "answer"))
+    assert status == "blocked"  # ...but organisers can still see what happened
     assert body["evidence"] == []
     assert len(fake.calls_for("answer")) == 2  # one regeneration, then stop
     assert "Before you answer" in fake.calls_for("answer")[1].prompt.final_user
@@ -209,10 +217,10 @@ async def test_repeating_a_figure_already_given_to_this_team_is_not_a_leak(
     ]
     client = await _team(make_client, seeded)
     first = (await _ask(client, "cfo", "Exactly how much was the QA budget cut?")).json()
-    assert first["status"] == "answered" and first["evidence"][0]["passage_id"] == "A-FIN-002#2"
+    assert first["evidence"][0]["passage_id"] == "A-FIN-002#2"
 
     second = (await _ask(client, "cfo", "And how did revenue do?")).json()
-    assert second["status"] == "answered" and "15 percent" in second["answer"]
+    assert "15 percent" in second["answer"]
     assert len(fake.calls_for("answer")) == 2  # first attempt passed, no regeneration
 
     third = (await _ask(client, "cfo", "What is QA's budget now?")).json()
@@ -259,7 +267,7 @@ async def test_confirming_a_guessed_date_is_blocked(seeded, make_client, fake, d
     ]
     client = await _team(make_client, seeded)
     r = (await _ask(client, "cfo", "Is the QA staffing review on the 16th?")).json()
-    assert r["status"] == "answered" and "16" not in r["answer"]
+    assert r["answer"] not in DEFLECTIONS and "16" not in r["answer"]
     assert len(fake.calls_for("answer")) == 2
 
 
@@ -273,3 +281,32 @@ async def test_evidence_used_but_not_cited_still_becomes_a_card(seeded, make_cli
     body = (await _ask(client, "cfo", "How has revenue moved?")).json()
     assert [c["passage_id"] for c in body["evidence"]] == ["A-FIN-001#1"]
     assert await _count(db, TeamDisclosure, TeamDisclosure.passage_id == "A-FIN-001#1") == 1
+
+
+async def test_correcting_a_wrong_number_from_the_question_is_allowed(seeded, make_client, fake):
+    # step 8: "Q3 revenue came in at 39 crore, correct?" -> she corrected it, repeating 39,
+    # and the grounding check deflected her. 39 is the team's own (wrong) number, not a
+    # hidden fact, so repeating it is fine. A hidden number from the question is not:
+    # see test_confirming_a_guessed_date_is_blocked.
+    revenue = {"label": "specific", "topics": ["revenue"], "respectful": True}
+    fake.queues["classify"].append(revenue)
+    fake.queues["answer"].append(
+        {"reply": "Not 39 crore. Q3 revenue was 41.7 crore.", "cited": ["A-FIN-001#1"]}
+    )
+    client = await _team(make_client, seeded)
+    body = (await _ask(client, "cfo", "Q3 revenue came in at 39 crore, correct?")).json()
+    assert body["answer"].startswith("Not 39 crore")
+    assert len(fake.calls_for("answer")) == 1
+
+
+async def test_paraphrase_card_shows_the_authored_paraphrase_and_says_so(seeded, make_client, fake):
+    fake.queues["classify"].append(QA_BUDGET)
+    fake.queues["answer"].append(
+        {"reply": "Operations was left to handle the inspection side.", "cited": ["A-FIN-002#3"]}
+    )
+    client = await _team(make_client, seeded)
+    body = (await _ask(client, "cfo", "Who else knew about the QA cut?")).json()
+    [card] = body["evidence"]
+    assert card["mode"] == "paraphrase"
+    assert card["excerpt"].startswith("The memo was copied to the head of operations")
+    assert "absorbed by Operations" not in card["excerpt"]

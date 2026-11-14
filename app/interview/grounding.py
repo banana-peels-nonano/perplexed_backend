@@ -6,8 +6,9 @@ ungrounded_facts
     Every factual number (a figure, a date, a time, a code) and every full name in the
     reply must appear in what the stakeholder was given: this turn's evidence as she saw
     it (render.py), record titles, her persona and beliefs, her colleagues, and her own
-    earlier answers to this team. The participant's questions are NOT a source, so
-    "was the review on the 16th?" -> "yes, the 16th" fails unless she had the date.
+    earlier answers to this team. The participant's question counts only for numbers that
+    are not hidden facts and for names: "not 39 crore" passes, but "was the review on the
+    16th?" -> "yes, the 16th" fails unless she was given the date in quote mode.
     Step 7: she invented "Anil Rao" from "A. Rao", and confirmed a calendar entry she
     had no evidence of. Not caught: invented facts with no number or name in them.
 
@@ -72,16 +73,35 @@ def _known_people(case: Case) -> tuple[set[str], set[str]]:
 
 
 def ungrounded_facts(
-    case: Case, stakeholder_id: str, provided: dict[str, Mode], already_said: str, reply: str
+    case: Case,
+    stakeholder_id: str,
+    provided: dict[str, Mode],
+    already_said: str,
+    reply: str,
+    question: str = "",
 ) -> list[str]:
     source = grounding_text(case, stakeholder_id, provided, already_said)
     known = {n for n, _ in _numbers(source)}
+    # Repeating the participant's own number is fine ("not 39 crore, 41.7"), UNLESS that
+    # number is a real fact she hasn't been given in quote mode: then "yes, the 16th" is a
+    # confirmed guess. Step 8: "39" (a wrong premise) was blocked and deflected; "16" and
+    # "15" (hidden facts) must stay blocked.
+    company = case.stakeholder[stakeholder_id].company
+    hidden = {
+        n
+        for pid, p in case.passage.items()
+        if case.company_of_passage(pid) == company and provided.get(pid) != Mode.quote
+        for n, _ in _numbers(p.text)
+    }
+    known |= {n for n, _ in _numbers(question)} - hidden
     found = [n for n, fact in _numbers(reply) if fact and n not in known]
 
     full, surnames = _known_people(case)
     for first, last in re.findall(r"\b([A-Z][a-z]+) ([A-Z][a-z]+)\b", reply):
         if last in surnames and first not in _HONORIFICS:
             name = f"{first} {last}"
+            if name in question:
+                continue  # echoing the participant's own name for someone reveals nothing
             if name not in full or name not in source:
                 found.append(name)  # invented ("Anil Rao") or someone she can't know
     return list(dict.fromkeys(found))

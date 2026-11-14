@@ -91,7 +91,7 @@ def check_reply(
     if mentions(reply, stakeholder.canary):
         fail("canary", stakeholder.canary)
 
-    for fact in ungrounded_facts(case, stakeholder_id, provided, already_said, reply):
+    for fact in ungrounded_facts(case, stakeholder_id, provided, already_said, reply, question):
         fail("ungrounded_fact", fact)
 
     check.ok = not check.violations

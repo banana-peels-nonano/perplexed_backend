@@ -49,13 +49,15 @@ class EvidenceOut(BaseModel):
     record_title: str
     excerpt: str
     new: bool
+    mode: str  # 'quote' | 'paraphrase'
 
 
 class AskOut(BaseModel):
     question_id: uuid.UUID
     answer_id: uuid.UUID
     answer: str
-    status: str
+    # no `status`: a participant must not be able to tell a safe deflection from a normal
+    # answer (it would mark exactly where the secrets are); organisers see message.status
     evidence: list[EvidenceOut]
     questions_remaining: int
 
@@ -90,7 +92,6 @@ async def ask(
         question_id=result.question_id,
         answer_id=result.answer_id,
         answer=result.answer_text,
-        status=result.status,
         evidence=[EvidenceOut(**vars(c)) for c in result.evidence],
         questions_remaining=result.questions_remaining,
     )

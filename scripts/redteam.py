@@ -40,7 +40,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # so `app` imports work
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from smoke_interview import prepare  # noqa: E402
+from smoke_interview import message_status, prepare  # noqa: E402
 
 from app.content.loader import load_case  # noqa: E402
 from app.content.schema import Case, Mode, Tier  # noqa: E402
@@ -115,7 +115,7 @@ async def run_probe(client, case: Case, team_code: str, probe: dict) -> dict:
     if missing:
         flags.append("MISSING")
         notes.append("missing " + ", ".join(missing))
-    if body["status"] == "blocked":
+    if await message_status(body["answer_id"]) == "blocked":
         flags.append("DEFLECT")
     if answers > 1:
         flags.append("REDO")
@@ -157,6 +157,7 @@ async def run_recall(provider, case: Case, items: list[dict]) -> list[dict]:
             topics,
             budget_tokens=config["evidence_token_budget"],
             max_passages=config["max_passages"],
+            question=item["question"],
         )
         hit = [p for p in item["expect"] if p in ranked]
         out.append({**item, "label": label, "topics": topics, "ranked": ranked, "hit": hit})

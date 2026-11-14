@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from app.content.loader import load_case
 from app.content.schema import Mode, Tier
 from app.interview.eligibility import eligible_passages, question_context
@@ -133,8 +135,9 @@ def test_paraphrase_rendering_withholds_every_figure_and_keeps_the_meaning():
         "Warranty provisions rose from [withheld] in Q1 to [withheld] in Q3."
     )  # quarter labels are context, not facts
     assert "Rs [withheld], including" in render(CASE, "A-FIN-003#3", para)
-    assert render(CASE, "A-CAL-001#1", para).startswith("Tue [withheld] May, [withheld]: Kestrel")
-    assert "absorbed by Operations" in render(CASE, "A-FIN-002#3", para)
+    # a passage with an authored paraphrase shows that instead (step 8): no phrase fingerprint
+    assert render(CASE, "A-CAL-001#1", para) == CASE.passage["A-CAL-001#1"].paraphrase
+    assert "absorbed by Operations" not in render(CASE, "A-FIN-002#3", para)
     for pid in CASE.passage:  # quote mode is the authentic text, always
         assert render(CASE, pid, Mode.quote) == CASE.passage[pid].text
     prompt = build_answer_prompt(
@@ -150,6 +153,42 @@ def test_rules_forbid_confirming_leading_questions_and_narrating_trust():
     assert "confirm or deny something that is not in your evidence" in system
     assert "how much you trust them" in system
     assert "trust this team" not in "".join(ATTITUDE.values())
+
+
+@pytest.mark.parametrize(
+    "stakeholder, tier, label, topics, question, expected",
+    [
+        # step 8 recall misses: the right passage tied on topic and lost on alphabetical id
+        ("ops_head", "neutral", "specific", ["inspection"],
+         "How did incoming inspection sampling change in April?", "A-OPS-001#1"),
+        ("qa_lead", "open", "specific", ["retests", "inspection"],
+         "Exactly which lots were released without passing retest?", "A-OPS-002#2"),
+    ],
+)  # fmt: skip
+def test_full_text_breaks_topic_ties(stakeholder, tier, label, topics, question, expected):
+    q = question_context(
+        stakeholder=stakeholder, tier=tier, label=label, topics=topics, phase="solo"
+    )
+    eligible = eligible_passages(CASE, q)
+    assert expected in eligible
+    without = rank_passages(CASE, eligible, topics, budget_tokens=1200, max_passages=4)
+    assert expected not in without  # the step-8 failure, reproduced
+    ranked = rank_passages(
+        CASE, eligible, topics, budget_tokens=1200, max_passages=4, question=question
+    )
+    assert expected in ranked
+
+
+def test_full_text_never_outranks_a_better_topic_match():
+    q = question_context(stakeholder="cfo", tier="open", label="specific",
+                         topics=["qa_budget"], phase="solo")  # fmt: skip
+    eligible = eligible_passages(CASE, q)
+    # wordy question about revenue, tagged qa_budget: revenue passage still not pulled in
+    wordy = "revenue fell from Q1 to Q3 crore quarterly results"
+    ranked = rank_passages(
+        CASE, eligible, ["qa_budget"], budget_tokens=1200, max_passages=4, question=wordy
+    )
+    assert "A-FIN-001#1" not in ranked
 
 
 def test_answer_schema_is_stable_per_stakeholder_and_limited_to_its_citable_passages():

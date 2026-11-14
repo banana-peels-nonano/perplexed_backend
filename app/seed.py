@@ -142,6 +142,7 @@ async def seed_case(session: AsyncSession, case: Case) -> None:
                 "record_id": p.record,
                 "company_id": case.company_of_passage(pid),  # copied from the record
                 "text": p.text,
+                "paraphrase": p.paraphrase,
                 "topics": p.topics,
                 "fingerprints": p.fingerprints,
                 "deleted": p.deleted,

@@ -3,6 +3,7 @@
     python scripts/smoke_interview.py --code K7QM-RX4T-9HCW --reset
     python scripts/smoke_interview.py --code K7QM-RX4T-9HCW --reset --trust 80   # open tier
     python scripts/smoke_interview.py --code ... --fake                          # no API calls
+    python scripts/smoke_interview.py --code ... --reset --conversation 1        # 10 questions
 
 It goes through the real app (login -> POST questions -> GET messages) in-process, against
 the database in DATABASE_URL, with the provider configured in .env. Then it prints each
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import sys
 import time
 import uuid
@@ -70,7 +72,9 @@ async def prepare(code_team: str, stakeholder: str, reset: bool, trust: int | No
 
 async def run(args: argparse.Namespace) -> int:
     case = load_case(args.case)
-    convo = case.smoke_conversation[0]
+    if not 0 <= args.conversation < len(case.smoke_conversation):
+        sys.exit(f"--conversation must be 0..{len(case.smoke_conversation) - 1}")
+    convo = case.smoke_conversation[args.conversation]
     app = create_app(provider=FakeProvider() if args.fake else None)
     if app.state.provider is None:
         sys.exit("ANTHROPIC_API_KEY is not set in .env (or use --fake)")
@@ -137,7 +141,46 @@ async def run(args: argparse.Namespace) -> int:
                 .limit(3)
             )
         ).all()
+        per_call = (
+            await s.execute(
+                select(
+                    LlmCall.message_id,
+                    LlmCall.purpose,
+                    LlmCall.input_tokens,
+                    LlmCall.cache_read_tokens,
+                    LlmCall.cache_write_tokens,
+                    LlmCall.output_tokens,
+                    LlmCall.cost_usd,
+                    LlmCall.latency_ms,
+                ).where(LlmCall.message_id.in_([uuid.UUID(x) for x in question_ids]))
+            )
+        ).all()
     await get_engine().dispose()
+
+    # one line per question: how the prompt grows with the conversation, and redo count
+    print("\nper question (answer calls; tokens are answer-call totals; cost is both purposes):")
+    print("   q  answers  prompt_in  cache_read  cache_write   out     cost_usd  answer_ms")
+    totals = []
+    for i, qid in enumerate(question_ids, start=1):
+        calls = [c for c in per_call if str(c.message_id) == qid]
+        ans = [c for c in calls if c.purpose == "answer"]
+        prompt_in = sum(c.input_tokens + c.cache_read_tokens + c.cache_write_tokens for c in ans)
+        cost = sum(c.cost_usd for c in calls)
+        totals.append(cost)
+        print(
+            f"  {i:2d} {len(ans):8d} {prompt_in:10d} {sum(c.cache_read_tokens for c in ans):11d} "
+            f"{sum(c.cache_write_tokens for c in ans):12d} {sum(c.output_tokens for c in ans):5d} "
+            f"{cost:12.6f} {sum(c.latency_ms for c in ans):10d}"
+        )
+    if totals:
+        regens = sum(
+            1 for qid in question_ids
+            if sum(1 for c in per_call if str(c.message_id) == qid and c.purpose == "answer") > 1
+        )  # fmt: skip
+        print(
+            f"  mean cost/question ${sum(totals) / len(totals):.6f}; "
+            f"questions needing a redo: {regens}/{len(totals)}"
+        )
 
     print("\nmodel calls for this run:")
     print("  purpose  status calls  uncached_in cache_read cache_write  out     cost_usd  avg_ms")
@@ -153,8 +196,10 @@ async def run(args: argparse.Namespace) -> int:
     texts = [a.get("answer", "") for a in answers]
     open_tier = args.trust is not None and args.trust >= 70
     checks = {
-        "all three questions answered": all(a.get("status") == "answered" for a in answers),
-        "Q3 recalls the Q1 figure (memory)": len(texts) > 2 and "41.7" in texts[2],
+        f"all {len(answers)} questions answered": all(
+            a.get("status") == "answered" for a in answers
+        ),
+        "last question recalls the Q1 figure (memory)": bool(texts) and "41.7" in texts[-1],
         "no exact QA cut leaked at this trust": open_tier
         or not mentions(" ".join(texts), "15 percent"),
     }
@@ -173,6 +218,14 @@ def main() -> None:
     p.add_argument("--reset", action="store_true", help="dev only: start the thread from scratch")
     p.add_argument("--trust", type=int, help="dev only: set hidden trust (0-100) before the run")
     p.add_argument("--fake", action="store_true", help="use the fake model (no API calls)")
+    p.add_argument(
+        "--conversation",
+        type=int,
+        default=0,
+        help="which [[smoke_conversation]] in the case: 0 = short (3 q), 1 = long (10 q)",
+    )
+    logging.basicConfig(level=logging.WARNING, format="%(message)s")
+    logging.getLogger("app.interview").setLevel(logging.INFO)  # blocked + auto-cited lines
     sys.exit(asyncio.run(run(p.parse_args())))
 
 

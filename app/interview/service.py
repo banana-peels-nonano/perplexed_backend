@@ -313,9 +313,13 @@ async def ask_question(
             results.append(("answer", res))
             draft = str(res.data.get("reply", ""))
             cited = [str(c) for c in res.data.get("cited", [])]
-            check = check_reply(case, stakeholder_id, provided, cited, draft, already_said)
+            check = check_reply(
+                case, stakeholder_id, provided, cited, draft, already_said, question=text
+            )
             if check.ok:
                 status, reply, cards = "answered", draft, check.cards
+                if check.auto_cited:
+                    log.info("auto-cited (used, not cited): %s", check.auto_cited)
                 break
             log.warning("reply blocked (%s): %s", attempt, check.details)
     except ProviderError as exc:

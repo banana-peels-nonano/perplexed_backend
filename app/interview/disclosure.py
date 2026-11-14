@@ -9,10 +9,14 @@ Violations (any one fails the reply; the caller regenerates once, then falls bac
   leaked_passage       the reply contains a fingerprint of a passage that was not provided
                        (same company only; another company's text should be unreachable)
   canary               the reply contains the stakeholder's canary (system prompt leak)
+  ungrounded_fact      a figure, date, code or full name with no source (grounding.py)
 
 Fingerprints that appear in `already_said` (this stakeholder's earlier answers to this
 team) are not counted: those answers passed this check when they were given, so repeating
 "you told me 15 percent" later reveals nothing new. The canary is always checked.
+
+A passing reply also gets passages it clearly used but didn't cite added to its cards
+(grounding.used_but_uncited), so the team's evidence board and unlock chains stay true.
 
 Evidence cards carry the passage text from the case, never the model's wording, rendered
 at the mode it was provided in (render.py): a paraphrase card shows no exact figures.
@@ -20,11 +24,12 @@ at the mode it was provided in (render.py): a paraphrase card shows no exact fig
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 
 from app.content.schema import Case, Mode
+from app.interview.grounding import ungrounded_facts, used_but_uncited
 from app.interview.render import render
+from app.interview.text import mentions, normalise  # noqa: F401  (re-exported)
 
 
 @dataclass(frozen=True)
@@ -41,49 +46,7 @@ class DisclosureCheck:
     violations: list[str] = field(default_factory=list)
     details: list[str] = field(default_factory=list)
     cards: list[EvidenceCard] = field(default_factory=list)
-
-
-_UNITS = (
-    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
-    "fifteen sixteen seventeen eighteen nineteen"
-).split()
-_TENS = "twenty thirty forty fifty sixty seventy eighty ninety".split()
-_U = "|".join(_UNITS[1:10])
-_T = "|".join(_TENS)
-
-
-def normalise(text: str) -> str:
-    """The form fingerprints are compared in: case, spelling and punctuation flattened.
-
-    Step 7: haiku wrote "nine percent operating margin" for the fingerprint
-    "9 percent operating margin", and "fifteen percent" for "15 percent". Matching the
-    literal string missed both. Number words up to ninety-nine become digits, and the
-    common spellings of percent, crore, thousands separators, hyphens and curly quotes
-    are made the same, so the fingerprint and the reply meet in one form.
-    """
-    t = text.casefold().replace("\u2019", "'").replace("\u2018", "'")
-    t = re.sub(r"(?<=\d),(?=\d{3}\b)", "", t)  # 3,050 -> 3050
-    t = re.sub(r"(\w)-(\w)", r"\1 \2", t)  # twenty-five, 1-in-20
-    t = re.sub(
-        rf"\b({_T})\s+({_U})\b",
-        lambda m: str(10 * (_TENS.index(m[1]) + 2) + _UNITS.index(m[2])),
-        t,
-    )
-    t = re.sub(rf"\b({_T})\b", lambda m: str(10 * (_TENS.index(m[1]) + 2)), t)
-    t = re.sub(r"\b(" + "|".join(_UNITS) + r")\b", lambda m: str(_UNITS.index(m[1])), t)
-    t = re.sub(r"\s*%", " percent", t)
-    t = re.sub(r"\bper\s+cent\b|\bpct\b", "percent", t)
-    t = re.sub(r"\b(crores|cr)\b\.?", "crore", t)
-    return re.sub(r"\s+", " ", t)
-
-
-def mentions(text: str, fingerprint: str) -> bool:
-    """True if `text` contains `fingerprint` as whole words, after both are normalised.
-
-    Whole words, so "19 percent" or "1.15 percent" never count as "9 percent"/"15 percent".
-    """
-    fp = re.escape(normalise(fingerprint).strip())
-    return re.search(rf"(?<![\w.]){fp}(?!\w)", normalise(text)) is not None
+    auto_cited: list[str] = field(default_factory=list)  # used but not cited by the model
 
 
 def check_reply(
@@ -93,6 +56,7 @@ def check_reply(
     cited: list[str],
     reply: str,
     already_said: str = "",
+    question: str = "",
 ) -> DisclosureCheck:
     check = DisclosureCheck(ok=True)
 
@@ -127,9 +91,13 @@ def check_reply(
     if mentions(reply, stakeholder.canary):
         fail("canary", stakeholder.canary)
 
+    for fact in ungrounded_facts(case, stakeholder_id, provided, already_said, reply):
+        fail("ungrounded_fact", fact)
+
     check.ok = not check.violations
     if check.ok:
-        for pid in dict.fromkeys(cited):  # de-duplicate, keep order
+        check.auto_cited = used_but_uncited(case, provided, cited, reply, question)
+        for pid in dict.fromkeys([*cited, *check.auto_cited]):  # de-duplicate, keep order
             passage = case.passage[pid]
             record = case.record[passage.record]
             check.cards.append(

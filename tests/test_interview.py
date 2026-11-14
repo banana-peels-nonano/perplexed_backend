@@ -247,3 +247,29 @@ async def test_paraphrase_card_is_upgraded_when_the_team_later_earns_the_quote(
     thread = (await client.get(f"{API}/stakeholders/cfo/messages")).json()
     cards = [c["excerpt"] for m in thread for c in m["evidence"]]
     assert cards == [MEMO_TEXT, MEMO_TEXT]
+
+
+async def test_confirming_a_guessed_date_is_blocked(seeded, make_client, fake, db):
+    # step 7, live: asked "is there a QA staffing review on your calendar?" at neutral
+    # trust (entry denied), she said there was. A date she has no source for now fails.
+    fake.queues["classify"].append(QA_BUDGET)
+    fake.queues["answer"] += [
+        {"reply": "Yes, it is on Friday 16 May.", "cited": []},
+        {"reply": "I don't recall the details of my calendar offhand.", "cited": []},
+    ]
+    client = await _team(make_client, seeded)
+    r = (await _ask(client, "cfo", "Is the QA staffing review on the 16th?")).json()
+    assert r["status"] == "answered" and "16" not in r["answer"]
+    assert len(fake.calls_for("answer")) == 2
+
+
+async def test_evidence_used_but_not_cited_still_becomes_a_card(seeded, make_client, fake, db):
+    revenue = {"label": "specific", "topics": ["revenue"], "respectful": True}
+    fake.queues["classify"].append(revenue)
+    fake.queues["answer"].append(  # draws on A-FIN-001#1, cites nothing
+        {"reply": "Revenue fell from 48.2 crore in Q1 to 41.7 crore in Q3.", "cited": []}
+    )
+    client = await _team(make_client, seeded)
+    body = (await _ask(client, "cfo", "How has revenue moved?")).json()
+    assert [c["passage_id"] for c in body["evidence"]] == ["A-FIN-001#1"]
+    assert await _count(db, TeamDisclosure, TeamDisclosure.passage_id == "A-FIN-001#1") == 1

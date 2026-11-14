@@ -113,4 +113,4 @@ def test_spelled_out_paraphrase_figure_is_blocked():
     provided = {"A-FIN-002#1": Mode.paraphrase}
     reply = "I approved it to protect our nine percent operating margin target."
     result = check_reply(CASE, "cfo", provided, ["A-FIN-002#1"], reply)
-    assert not result.ok and result.violations == ["figure_in_paraphrase"]
+    assert not result.ok and "figure_in_paraphrase" in result.violations

@@ -19,6 +19,7 @@ MEMO_TEXT = (
     "As part of the FY cost programme, the quality-assurance budget is reduced. "
     "Approved: R. Malhotra, CFO. Rationale: protect the 9 percent operating margin target."
 )
+MEMO_PARAPHRASED = MEMO_TEXT.replace("9 percent", "[withheld]")
 
 
 async def _team(make_client, seeded, code="A01"):
@@ -59,7 +60,9 @@ async def test_question_returns_answer_and_authentic_evidence_card(seeded, make_
     assert body["questions_remaining"] == 9
     [card] = body["evidence"]
     assert card["passage_id"] == "A-FIN-002#1" and card["new"] is True
-    assert card["excerpt"] == MEMO_TEXT  # from the database, not the model
+    # from the database, not the model, and only what she was allowed to say: neutral trust
+    # gave her the memo in paraphrase mode, so the card withholds the figure too (step 7)
+    assert card["excerpt"] == MEMO_PARAPHRASED
     assert card["record_title"] == "Cost programme memo: QA budget"
 
     # what reached the model: the memo (neutral trust -> paraphrase), never the 15% figure
@@ -219,3 +222,28 @@ async def test_repeating_a_figure_already_given_to_this_team_is_not_a_leak(
     # one schema for every answer call to this stakeholder, so the prompt cache survives
     schemas = {repr(c.schema) for c in fake.calls_for("answer")}
     assert len(schemas) == 1
+
+
+async def test_paraphrase_card_is_upgraded_when_the_team_later_earns_the_quote(
+    seeded, make_client, fake, db
+):
+    fake.queues["classify"] += [QA_BUDGET, QA_BUDGET]
+    fake.queues["answer"] += [
+        {"reply": "We trimmed QA spend to protect our margin.", "cited": ["A-FIN-002#1"]},
+        {"reply": "The rationale was the 9 percent margin target.", "cited": ["A-FIN-002#1"]},
+    ]
+    client = await _team(make_client, seeded)
+    first = (await _ask(client, "cfo", "Why was the QA budget cut?")).json()
+    assert first["evidence"][0]["excerpt"] == MEMO_PARAPHRASED
+
+    await _sql(db, "UPDATE team_stakeholder_state SET trust = 80")  # open: memo in quote mode
+    second = (await _ask(client, "cfo", "What exactly was the margin target?")).json()
+    [card] = second["evidence"]
+    assert card["excerpt"] == MEMO_TEXT and card["new"] is True  # upgraded counts as new
+    async with make_sessionmaker(db)() as s:
+        assert await s.scalar(select(TeamDisclosure.mode)) == "quote"
+
+    # every laptop's view of the thread now shows the full memo on both answers
+    thread = (await client.get(f"{API}/stakeholders/cfo/messages")).json()
+    cards = [c["excerpt"] for m in thread for c in m["evidence"]]
+    assert cards == [MEMO_TEXT, MEMO_TEXT]

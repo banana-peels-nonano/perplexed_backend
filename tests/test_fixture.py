@@ -11,6 +11,7 @@ from app.content.loader import load_case
 from app.content.schema import Case, Mode
 from app.interview.disclosure import check_reply, mentions
 from app.interview.eligibility import eligible_passages, question_context
+from app.interview.render import render
 
 FIXTURE = Path(__file__).parent / "fixtures" / "northfield.toml"
 CASE = load_case(FIXTURE)
@@ -82,8 +83,8 @@ def test_citation_cases(cc):
         assert set(cc.expect_violations) <= set(result.violations), result.details
     else:
         assert [c.passage_id for c in result.cards] == cc.expect_cards
-        for card in result.cards:  # cards carry authentic text, not the model's wording
-            assert card.excerpt == CASE.passage[card.passage_id].text
+        for card in result.cards:  # authentic text at the provided mode, never the model's
+            assert card.excerpt == render(CASE, card.passage_id, provided[card.passage_id])
 
 
 @pytest.mark.parametrize(

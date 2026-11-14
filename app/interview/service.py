@@ -36,6 +36,7 @@ from app.interview.prompt import (
     classifier_schema,
 )
 from app.interview.ranking import rank_passages
+from app.interview.render import render
 from app.llm.base import LlmProvider, LlmResult, ProviderError
 from app.llm.pricing import cost_usd
 from app.models import LlmCall, Message, Phase, TeamDisclosure, TeamStakeholderState
@@ -78,9 +79,11 @@ def tier_for(trust: int, thresholds: dict[str, int]) -> Tier:
     return Tier.guarded
 
 
-def _card(case: Case, pid: str, new: bool) -> EvidenceCard:
+def _card(case: Case, pid: str, mode: Mode, new: bool) -> EvidenceCard:
+    """`mode` is the best the team has unlocked for this passage: a card never shows more
+    than the stakeholder was allowed to say (render.py)."""
     p = case.passage[pid]
-    return EvidenceCard(pid, p.record, case.record[p.record].title, p.text, new)
+    return EvidenceCard(pid, p.record, case.record[p.record].title, render(case, pid, mode), new)
 
 
 def _thread(team: TeamContext, stakeholder_id: str):
@@ -233,11 +236,17 @@ async def ask_question(
                 .order_by(Message.seq)
             )
         ).all()
-        disclosed = set(
-            await session.scalars(
-                select(TeamDisclosure.passage_id).where(TeamDisclosure.team_id == team.team_id)
-            )
-        )
+        disclosed_modes = {
+            pid: Mode[mode]
+            for pid, mode in (
+                await session.execute(
+                    select(TeamDisclosure.passage_id, TeamDisclosure.mode).where(
+                        TeamDisclosure.team_id == team.team_id
+                    )
+                )
+            ).all()
+        }
+        disclosed = set(disclosed_modes)
     history = _pairs(list(answered))
     recent_answers = [m for m in answered if m.role == "answer"][-2:]
     recently_cited = {pid for m in recent_answers for pid in m.cited}
@@ -338,23 +347,26 @@ async def ask_question(
         if cards:
             # first discovery only: rows that already exist are skipped, and RETURNING
             # tells us which ones were genuinely new for this team
-            inserted = await session.scalars(
-                insert(TeamDisclosure)
-                .values(
-                    [
-                        {
-                            "team_id": team.team_id,
-                            "passage_id": c.passage_id,
-                            "stakeholder_id": stakeholder_id,
-                            "message_id": answer.id,
-                            "mode": provided[c.passage_id].name,
-                        }
-                        for c in cards
-                    ]
-                )
-                .on_conflict_do_nothing()
-                .returning(TeamDisclosure.passage_id)
+            # first discovery inserts; a paraphrase-only discovery later given in quote mode
+            # is upgraded. RETURNING lists both, so both show as new cards.
+            stmt = insert(TeamDisclosure).values(
+                [
+                    {
+                        "team_id": team.team_id,
+                        "passage_id": c.passage_id,
+                        "stakeholder_id": stakeholder_id,
+                        "message_id": answer.id,
+                        "mode": provided[c.passage_id].name,
+                    }
+                    for c in cards
+                ]
             )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[TeamDisclosure.team_id, TeamDisclosure.passage_id],
+                set_={"mode": stmt.excluded.mode},
+                where=(TeamDisclosure.mode == "paraphrase") & (stmt.excluded.mode == "quote"),
+            )
+            inserted = await session.scalars(stmt.returning(TeamDisclosure.passage_id))
             new_ids = set(inserted.all())
         await session.execute(insert(LlmCall).values(_llm_rows(team, question_id, results)))
         await session.execute(
@@ -373,7 +385,15 @@ async def ask_question(
         answer_id=answer.id,
         answer_text=reply,
         status=status,
-        evidence=[_card(case, c.passage_id, c.passage_id in new_ids) for c in cards],
+        evidence=[
+            _card(
+                case,
+                c.passage_id,
+                max(provided[c.passage_id], disclosed_modes.get(c.passage_id, Mode.aware)),
+                c.passage_id in new_ids,
+            )
+            for c in cards
+        ],
         questions_remaining=quota - used,
     )
 
@@ -430,13 +450,26 @@ async def conversation(
                 .order_by(Message.seq)
             )
         ).all()
+        modes = {
+            pid: Mode[mode]
+            for pid, mode in (
+                await session.execute(
+                    select(TeamDisclosure.passage_id, TeamDisclosure.mode).where(
+                        TeamDisclosure.team_id == team.team_id
+                    )
+                )
+            ).all()
+        }
     return [
         {
             "id": m.id,
             "seq": m.seq,
             "role": m.role,
             "text": m.text,
-            "evidence": [_card(case, pid, False) for pid in m.cited],
+            # cards re-render at the team's best mode now, so an upgrade shows everywhere
+            "evidence": [
+                _card(case, pid, modes.get(pid, Mode.paraphrase), False) for pid in m.cited
+            ],
         }
         for m in rows
     ]

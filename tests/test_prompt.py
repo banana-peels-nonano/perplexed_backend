@@ -12,9 +12,9 @@ from app.interview.prompt import (
     build_classifier_prompt,
     build_system,
     classifier_schema,
-    paraphrase_text,
 )
 from app.interview.ranking import rank_passages
+from app.interview.render import render
 
 CASE = load_case(Path(__file__).parent / "fixtures" / "northfield.toml")
 
@@ -122,21 +122,27 @@ def test_recently_cited_passages_do_not_ride_along_on_a_new_topic():
     assert ranked and all("board" in CASE.passage[p].topics for p in ranked)
 
 
-def test_paraphrase_evidence_arrives_with_its_figures_withheld():
-    assert paraphrase_text(CASE, "A-FIN-002#1").endswith(
+def test_paraphrase_rendering_withholds_every_figure_and_keeps_the_meaning():
+    para = Mode.paraphrase
+    assert render(CASE, "A-FIN-002#1", para).endswith(
         "protect the [withheld] operating margin target."
     )
-    ledger = paraphrase_text(CASE, "A-FIN-003#2")
-    assert "RL-2207" not in ledger and "[withheld] through RL-2219" in ledger  # only the print
-    provisions = paraphrase_text(CASE, "A-FIN-001#2")
-    assert "2.1 crore" not in provisions and "0.9 crore" in provisions
-    assert "absorbed by Operations" in paraphrase_text(CASE, "A-FIN-002#3")  # phrase: kept
+    # step 7e blanked only the fingerprint lot and the CFO then named RL-2219 as "the" lot
+    assert "resin lots [withheld] through [withheld]." in render(CASE, "A-FIN-003#2", para)
+    assert render(CASE, "A-FIN-001#2", para) == (
+        "Warranty provisions rose from [withheld] in Q1 to [withheld] in Q3."
+    )  # quarter labels are context, not facts
+    assert "Rs [withheld], including" in render(CASE, "A-FIN-003#3", para)
+    assert render(CASE, "A-CAL-001#1", para).startswith("Tue [withheld] May, [withheld]: Kestrel")
+    assert "absorbed by Operations" in render(CASE, "A-FIN-002#3", para)
+    for pid in CASE.passage:  # quote mode is the authentic text, always
+        assert render(CASE, pid, Mode.quote) == CASE.passage[pid].text
     prompt = build_answer_prompt(
         CASE, "cfo", tier=Tier.neutral, history=[], question="Why was QA cut?",
         evidence=[("A-FIN-002#1", Mode.paraphrase), ("A-FIN-001#1", Mode.quote)],
     )  # fmt: skip
     assert "9 percent" not in prompt.final_user and "[withheld]" in prompt.final_user
-    assert "41.7 crore" in prompt.final_user  # quote mode: figures stay
+    assert "41.7 crore" in prompt.final_user
 
 
 def test_rules_forbid_confirming_leading_questions_and_narrating_trust():

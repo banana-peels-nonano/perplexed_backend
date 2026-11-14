@@ -14,7 +14,8 @@ Fingerprints that appear in `already_said` (this stakeholder's earlier answers t
 team) are not counted: those answers passed this check when they were given, so repeating
 "you told me 15 percent" later reveals nothing new. The canary is always checked.
 
-Evidence cards carry the passage text from the case, never the model's wording.
+Evidence cards carry the passage text from the case, never the model's wording, rendered
+at the mode it was provided in (render.py): a paraphrase card shows no exact figures.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.content.schema import Case, Mode
+from app.interview.render import render
 
 
 @dataclass(frozen=True)
@@ -135,7 +137,7 @@ def check_reply(
                     passage_id=pid,
                     record_id=passage.record,
                     record_title=record.title,
-                    excerpt=passage.text,
+                    excerpt=render(case, pid, provided[pid]),
                 )
             )
     return check

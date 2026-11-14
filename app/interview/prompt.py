@@ -3,7 +3,7 @@
 The security boundary is WHAT goes in here, not what the instructions say:
   - only passages the caller passes in (already eligible and ranked) appear at all,
   - an 'aware' passage contributes its record title only, never its text,
-  - a 'paraphrase' passage arrives with the figures in its fingerprints [withheld],
+  - a 'paraphrase' passage arrives with every figure [withheld] (see render.py),
   - history carries earlier questions and answers, never earlier evidence,
   - everything the participant typed is HTML-escaped, so it can't close our tags
     and pose as evidence or instructions.
@@ -12,10 +12,10 @@ The security boundary is WHAT goes in here, not what the instructions say:
 from __future__ import annotations
 
 import html
-import re
 from typing import Any
 
 from app.content.schema import Case, Mode, Tier
+from app.interview.render import render
 from app.llm.base import Message, Prompt
 
 GAME_RULES = """You are an employee of a fictional company in a business investigation game.
@@ -84,33 +84,6 @@ def build_system(case: Case, stakeholder_id: str) -> str:
     )
 
 
-_FIGURE = re.compile(
-    r"[A-Za-z]*-?\d[\w.,]*(?:-\w+)*(?:\s*(?:%|percent\b|per cent\b|crores?\b|cr\b))?",
-    re.IGNORECASE,
-)
-
-
-def paraphrase_text(case: Case, passage_id: str) -> str:
-    """The passage as a paraphrase-mode stakeholder sees it: figures in its fingerprints
-    replaced by [withheld].
-
-    Step 7, 10-question run: in 3 of 10 neutral answers the model repeated an exact figure
-    it had been told not to (2.1 crore, 9 percent, RL-2207); the check caught all three,
-    and each regeneration cost ~2 s. It can't repeat what it never saw. Only digit-bearing
-    parts of a fingerprint go, so "9 percent operating margin" keeps "operating margin".
-    Phrase fingerprints without digits stay: the model needs their meaning, and the
-    disclosure check still guards them.
-    """
-    passage = case.passage[passage_id]
-    text = passage.text
-    for fp in passage.fingerprints:
-        if not any(ch.isdigit() for ch in fp):
-            continue
-        blanked = _FIGURE.sub("[withheld]", fp)
-        text = re.sub(re.escape(fp), lambda _m, b=blanked: b, text, flags=re.IGNORECASE)
-    return text
-
-
 def _evidence_block(case: Case, evidence: list[tuple[str, Mode]]) -> str:
     if not evidence:
         return "<evidence>\n(nothing relevant comes to mind)\n</evidence>"
@@ -122,8 +95,7 @@ def _evidence_block(case: Case, evidence: list[tuple[str, Mode]]) -> str:
             lines.append(f'<record id="{pid}" title="{title}" mode="aware" />')
         else:
             lines.append(f'<record id="{pid}" title="{title}" mode="{mode.name}">')
-            body = paraphrase_text(case, pid) if mode == Mode.paraphrase else passage.text
-            lines.append(body)
+            lines.append(render(case, pid, mode))
             lines.append("</record>")
     lines.append("</evidence>")
     return "\n".join(lines)

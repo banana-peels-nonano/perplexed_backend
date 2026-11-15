@@ -126,6 +126,11 @@ scripts/         dev tools
 tests/           pytest suite and fixtures
 ```
 
+## Frontend
+
+See [FRONTEND.md](FRONTEND.md): sessions, errors, interviews, evidence cards, the board,
+and what the UI must never show.
+
 ## Status
 
 See [BUILD_STATUS.md](BUILD_STATUS.md).

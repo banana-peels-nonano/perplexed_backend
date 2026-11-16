@@ -113,13 +113,22 @@ def build_answer_prompt(
     history: list[tuple[str, str]],  # [(question, answer), ...] oldest first, this team only
     evidence: list[tuple[str, Mode]],  # ranked, authorised: [(passage_id, mode), ...]
     question: str,
+    warn: bool = False,  # one more hostile question and they walk out (trust.py)
+    after_hr: bool = False,  # they already walked out on this team once
 ) -> Prompt:
     turns: list[Message] = []
     for q, a in history:
         turns.append(Message("user", wrap_question(q)))
         turns.append(Message("assistant", a))
+    mood = ATTITUDE[tier]
+    if after_hr:
+        mood += " Earlier you ended an interview with this team over their conduct and " \
+            "complained to HR; you are wary of them."  # fmt: skip
+    if warn:
+        mood += " Their questioning has crossed a line: tell them plainly, in character, that " \
+            "one more question like that and you will end this interview and go to HR."  # fmt: skip
     final_user = (
-        f"Your attitude toward this team right now (show it, never say it): {ATTITUDE[tier]}\n\n"
+        f"Your attitude toward this team right now (show it, never say it): {mood}\n\n"
         f"{_evidence_block(case, evidence)}\n\n"
         f"{wrap_question(question)}"
     )

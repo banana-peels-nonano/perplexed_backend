@@ -1,9 +1,12 @@
 """GET /stakeholders and GET /stakeholders/{id}: the team's own company only.
 
-Trust is hidden by the rules, so it never appears in any response. Questions remaining does.
+Trust is hidden by the rules, so it never appears in any response. Questions remaining
+does, and so does an HR lockout (a visible consequence of the team's own conduct).
 """
 
 from __future__ import annotations
+
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -22,6 +25,8 @@ class StakeholderOut(BaseModel):
     role: str
     department: str
     questions_remaining: int
+    # seconds until they'll talk to the team again after an HR walk-out (0 = available)
+    available_in_seconds: int = 0
 
 
 def _query(team: TeamContext):
@@ -41,8 +46,18 @@ def _query(team: TeamContext):
 
 def _out(s: Stakeholder, state: TeamStakeholderState | None) -> StakeholderOut:
     remaining = (state.quota - state.questions_used) if state else 0
+    locked = 0
+    if state is not None and state.locked_until is not None:
+        locked = max(0, int((state.locked_until - datetime.now(UTC)).total_seconds()) + 1)
+        if state.locked_until <= datetime.now(UTC):
+            locked = 0
     return StakeholderOut(
-        id=s.id, name=s.name, role=s.role, department=s.department, questions_remaining=remaining
+        id=s.id,
+        name=s.name,
+        role=s.role,
+        department=s.department,
+        questions_remaining=remaining,
+        available_in_seconds=locked,
     )
 
 

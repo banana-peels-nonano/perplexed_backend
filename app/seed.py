@@ -29,6 +29,7 @@ from app.auth.codes import generate_access_code, hash_access_code
 from app.content.loader import load_case
 from app.content.schema import Case
 from app.db import get_engine, make_sessionmaker
+from app.interview.trust import DEFAULT_HR, DEFAULT_TRUST_RULES
 from app.models import (
     Company,
     Department,
@@ -51,6 +52,9 @@ DEFAULT_EVENT_CONFIG = {
     "max_passages": 4,
     "max_sessions_per_team": 2,
     "models": {"answer": "claude-haiku-5-5", "classify": "claude-haiku-5-5"},
+    # placeholders until the seniors confirm them; see app/interview/trust.py
+    "trust_rules": DEFAULT_TRUST_RULES,
+    "hr": DEFAULT_HR,
 }
 
 # Rulebook defaults; organisers change them per event. 0 = no timer.

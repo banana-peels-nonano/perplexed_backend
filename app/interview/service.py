@@ -19,7 +19,8 @@ import logging
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case as sql_case
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -37,6 +38,7 @@ from app.interview.prompt import (
 )
 from app.interview.ranking import rank_passages
 from app.interview.render import render
+from app.interview.trust import clamp, judge, rules
 from app.llm.base import LlmProvider, LlmResult, ProviderError
 from app.llm.pricing import cost_usd
 from app.models import LlmCall, Message, Phase, TeamDisclosure, TeamStakeholderState
@@ -80,6 +82,7 @@ class AskResult:
     status: str  # 'answered' | 'blocked' (safe deflection after a failed check)
     evidence: list[EvidenceCard]
     questions_remaining: int
+    kind: str = "answer"  # 'answer' | 'hr_notice' (the stakeholder walked out)
 
 
 def tier_for(trust: int, thresholds: dict[str, int]) -> Tier:
@@ -148,15 +151,28 @@ async def _replay(
         )
     )
     state = await session.get(TSS, (team.team_id, question.stakeholder_id))
+    modes = await _disclosed_modes(session, team)
     return AskResult(
         question_id=question.id,
         question_text=question.text,
         answer_id=answer.id,
         answer_text=answer.text,
         status=answer.status,
-        evidence=[_card(case, pid, False) for pid in answer.cited],
+        # step 10: this passed (case, pid, new) to a 4-argument _card, so a retry of a
+        # question whose answer had cards crashed instead of replaying
+        evidence=[_card(case, pid, modes.get(pid, Mode.paraphrase), False) for pid in answer.cited],
         questions_remaining=state.quota - state.questions_used,
+        kind="hr_notice" if answer.role == "notice" else "answer",
     )
+
+
+async def _disclosed_modes(session: AsyncSession, team: TeamContext) -> dict[str, Mode]:
+    rows = await session.execute(
+        select(TeamDisclosure.passage_id, TeamDisclosure.mode).where(
+            TeamDisclosure.team_id == team.team_id
+        )
+    )
+    return {pid: Mode[mode] for pid, mode in rows.all()}
 
 
 async def ask_question(
@@ -202,25 +218,41 @@ async def ask_question(
                     TSS.stakeholder_id == stakeholder_id,
                     TSS.questions_used < TSS.quota,
                     TSS.in_flight_message_id.is_(None),
+                    or_(TSS.locked_until.is_(None), TSS.locked_until <= func.now()),
                 )
                 .values(
                     questions_used=TSS.questions_used + 1,
                     in_flight_message_id=question_id,
                     version=TSS.version + 1,
+                    # a lockout that has run out is over: strikes start again from zero
+                    strikes=sql_case((TSS.locked_until.is_not(None), 0), else_=TSS.strikes),
+                    locked_until=None,
                 )
-                .returning(TSS.trust, TSS.questions_used, TSS.quota)
+                .returning(TSS.trust, TSS.questions_used, TSS.quota, TSS.strikes)
             )
         ).one_or_none()
         if reserved is None:
             state = await session.get(TSS, (team.team_id, stakeholder_id))
             if state is None:
                 raise ApiError(404, "NOT_FOUND", "no such stakeholder")
+            left = await session.scalar(
+                select(func.extract("epoch", TSS.locked_until - func.now())).where(
+                    TSS.team_id == team.team_id, TSS.stakeholder_id == stakeholder_id
+                )
+            )
+            if left is not None and left > 0:
+                raise ApiError(
+                    409,
+                    "HR_LOCKOUT",
+                    f"{stakeholder.name} has gone to HR and won't talk to your team for now",
+                    {"retry_after_seconds": int(left) + 1},
+                )
             if state.in_flight_message_id is not None:
                 raise ApiError(
                     409, "QUESTION_IN_FLIGHT", "a teammate's question to this person is pending"
                 )
             raise ApiError(409, "QUOTA_EXHAUSTED", "no questions left for this person")
-        trust, used, quota = reserved
+        trust, used, quota, strikes = reserved
 
         seq = (
             await session.scalar(
@@ -248,17 +280,13 @@ async def ask_question(
                 .order_by(Message.seq)
             )
         ).all()
-        disclosed_modes = {
-            pid: Mode[mode]
-            for pid, mode in (
-                await session.execute(
-                    select(TeamDisclosure.passage_id, TeamDisclosure.mode).where(
-                        TeamDisclosure.team_id == team.team_id
-                    )
-                )
-            ).all()
-        }
+        disclosed_modes = await _disclosed_modes(session, team)
         disclosed = set(disclosed_modes)
+        walked_out_before = bool(
+            await session.scalar(
+                select(func.count()).where(*_thread(team, stakeholder_id), Message.role == "notice")
+            )
+        )
     history = _pairs(list(answered))
     recent_answers = [m for m in answered if m.role == "answer"][-2:]
     recently_cited = {pid for m in recent_answers for pid in m.cited}
@@ -281,7 +309,15 @@ async def ask_question(
         vocab = set(case.company[stakeholder.company].topics)
         label = clf.data.get("label", "broad")
         topics = [t for t in clf.data.get("topics", []) if t in vocab]
-
+        verdict = judge(label, bool(clf.data.get("respectful", True)), strikes, config)
+        if verdict.lockout:
+            # no answer call: the stakeholder ends the interview (question still charged)
+            return await _walk_out(
+                maker, case, team, stakeholder_id, question_id, seq, verdict, results,
+                config, quota - used,
+            )  # fmt: skip
+        # the stakeholder reacts to THIS question: answer at the trust it leaves them at
+        trust = clamp(trust + verdict.delta)
         tier = tier_for(trust, config["tier_thresholds"])
         eligible = eligible_passages(
             case,
@@ -306,7 +342,14 @@ async def ask_question(
         evidence: list[tuple[str, Mode]] = [(pid, eligible[pid]) for pid in ranked]
         provided = dict(evidence)
         prompt = build_answer_prompt(
-            case, stakeholder_id, tier=tier, history=history, evidence=evidence, question=text
+            case,
+            stakeholder_id,
+            tier=tier,
+            history=history,
+            evidence=evidence,
+            question=text,
+            warn=verdict.warn,
+            after_hr=walked_out_before,
         )
 
         deflection = DEFLECTIONS[question_id.int % len(DEFLECTIONS)]
@@ -394,7 +437,11 @@ async def ask_question(
                 TSS.stakeholder_id == stakeholder_id,
                 TSS.in_flight_message_id == question_id,
             )
-            .values(in_flight_message_id=None)
+            .values(
+                in_flight_message_id=None,
+                trust=func.least(100, func.greatest(0, TSS.trust + verdict.delta)),
+                strikes=TSS.strikes + int(verdict.strike),
+            )
         )
 
     return AskResult(
@@ -413,6 +460,61 @@ async def ask_question(
             for c in cards
         ],
         questions_remaining=quota - used,
+    )
+
+
+async def _walk_out(
+    maker, case, team, stakeholder_id, question_id, seq, verdict, results, config, remaining
+) -> AskResult:
+    """The last strike: no answer, an HR notice in the thread, and a timed lockout."""
+    _, hr = rules(config)
+    seconds = int(hr["lockout_seconds"])
+    name = case.stakeholder[stakeholder_id].name
+    minutes = max(1, round(seconds / 60))
+    text = (
+        f"{name} ends the interview and files a complaint with HR about your team's conduct. "
+        f"{name.split()[0]} won't speak to your team for the next {minutes} minutes."
+    )
+    async with maker() as session, session.begin():
+        notice = Message(
+            team_id=team.team_id,
+            stakeholder_id=stakeholder_id,
+            seq=seq + 1,
+            role="notice",
+            text=text,
+            status="answered",
+            cited=[],
+        )
+        session.add(notice)
+        await session.flush()
+        await session.execute(
+            update(Message).where(Message.id == question_id).values(status="answered")
+        )
+        await session.execute(insert(LlmCall).values(_llm_rows(team, question_id, results)))
+        await session.execute(
+            update(TSS)
+            .where(
+                TSS.team_id == team.team_id,
+                TSS.stakeholder_id == stakeholder_id,
+                TSS.in_flight_message_id == question_id,
+            )
+            .values(
+                in_flight_message_id=None,
+                trust=func.least(100, func.greatest(0, TSS.trust + verdict.delta)),
+                strikes=TSS.strikes + 1,
+                locked_until=func.now() + func.make_interval(0, 0, 0, 0, 0, 0, seconds),
+            )
+        )
+    log.warning("HR lockout: team %s, stakeholder %s, %ss", team.team_id, stakeholder_id, seconds)
+    return AskResult(
+        question_id=question_id,
+        question_text="",
+        answer_id=notice.id,
+        answer_text=text,
+        status="answered",
+        evidence=[],
+        questions_remaining=remaining,
+        kind="hr_notice",
     )
 
 

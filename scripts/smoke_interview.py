@@ -56,7 +56,13 @@ async def prepare(code_team: str, stakeholder: str, reset: bool, trust: int | No
         values: dict = {}
         if reset:  # back to how the event starts, trust included (it outlives a --trust run)
             start = (await current_event(s)).config.get("trust_start", 50)
-            values.update(questions_used=0, in_flight_message_id=None, trust=start)
+            values.update(
+                questions_used=0,
+                in_flight_message_id=None,
+                trust=start,
+                strikes=0,
+                locked_until=None,
+            )
         if trust is not None:
             values["trust"] = trust
         if values:

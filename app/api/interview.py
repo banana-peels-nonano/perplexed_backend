@@ -60,6 +60,9 @@ class AskOut(BaseModel):
     # answer (it would mark exactly where the secrets are); organisers see message.status
     evidence: list[EvidenceOut]
     questions_remaining: int
+    # 'answer', or 'hr_notice' when the stakeholder walked out over the team's conduct.
+    # Deliberately visible (a consequence of conduct), unlike deflections (FRONTEND.md)
+    kind: str
 
 
 class MessageOut(BaseModel):
@@ -94,6 +97,7 @@ async def ask(
         answer=result.answer_text,
         evidence=[EvidenceOut(**vars(c)) for c in result.evidence],
         questions_remaining=result.questions_remaining,
+        kind=result.kind,
     )
 
 

@@ -31,6 +31,7 @@ Every error has the same shape. Switch on `code`, show `message`:
 | `PHASE_CLOSED` | 409 | interviews aren't open in this phase |
 | `QUOTA_EXHAUSTED` | 409 | no questions left for this stakeholder |
 | `QUESTION_IN_FLIGHT` | 409 | a teammate's question to this person is still being answered |
+| `HR_LOCKOUT` | 409 | this person walked out over the team's conduct; `details.retry_after_seconds` says when they'll talk again (the attempt isn't charged) |
 | `PROVIDER_BUSY` | 503 | try again in a few seconds (the question was not charged) |
 | `BOARD_CONFLICT` | 409 | someone saved the board first: reload, reapply, save |
 | `UNKNOWN_EVIDENCE`, `BAD_QUOTE` | 422 | the board refers to something the team can't use |
@@ -46,10 +47,13 @@ Every error has the same shape. Switch on `code`, show `message`:
     a retry returns the original answer instead of charging again.
   - Answers take **3–5 seconds**. Show a "… is thinking" state rather than a spinner.
   - Only **one question per stakeholder per team** at a time (`QUESTION_IN_FLIGHT`).
-  - The response has `answer`, `evidence` (cards), `questions_remaining`, `question_id`
-    and `answer_id`.
+  - The response has `answer`, `evidence` (cards), `questions_remaining`, `question_id`,
+    `answer_id` and `kind`: `"answer"`, or `"hr_notice"` when the stakeholder ends the
+    interview over hostile questioning (show it as a notice, not as their speech).
 - `GET /stakeholders/{id}/messages` is the team's whole thread with that person, the same
-  on every laptop.
+  on every laptop. Messages have `role` `question`, `answer` or `notice` (the HR walk-out).
+- Each stakeholder in `GET /stakeholders` and `GET /status` has `available_in_seconds`:
+  0 normally, or the time left on an HR lockout. Show a countdown and disable asking.
 
 ## 4. Evidence cards
 
@@ -68,7 +72,8 @@ Each card has `passage_id`, `record_id`, `record_title`, `excerpt`, `mode` and `
   hidden by the rules and the API doesn't expose it.
 - **Never mark an answer as refused, blocked or special.** Every answer is plain text, even
   a non-answer. Anything that marks "this one was different" tells teams exactly where the
-  secrets are.
+  secrets are. The one exception is the HR walk-out, which arrives as `kind: "hr_notice"`
+  because teams are meant to see it: it's a consequence of their own conduct.
 - **Never draw links between cards automatically.** Only the team draws links. Automatic
   links would do the deduction the competition is judging.
 
@@ -116,8 +121,6 @@ companies, and everything comes from the API.
 
 ## 9. Coming next
 
-- Trust and HR: a stakeholder may refuse to talk for a while after hostile questioning.
-  This one *is* visible, with its own error code, because teams are meant to see it.
 - Organiser controls (phases, pause, extend).
 - WebSocket notifications.
 - Alliances, submissions and judging.

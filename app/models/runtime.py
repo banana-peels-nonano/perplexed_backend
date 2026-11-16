@@ -110,7 +110,7 @@ class TeamSession(Base):
 
 
 class TeamStakeholderState(Base):
-    """Hidden per-(team, stakeholder) state: trust, quota, and the in-flight guard."""
+    """Hidden per-(team, stakeholder) state: trust, quota, the in-flight guard, HR strikes."""
 
     __tablename__ = "team_stakeholder_state"
     __table_args__ = (
@@ -126,6 +126,9 @@ class TeamStakeholderState(Base):
     # set while a question is being answered; no FK to keep the two tables independent
     in_flight_message_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     version: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))
+    # HR (app/interview/trust.py): strikes towards a complaint, and the lockout it causes
+    strikes: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Message(Base):

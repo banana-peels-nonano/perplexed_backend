@@ -38,7 +38,9 @@ async def _ask(client, question="What happened to QA spend?", who="cfo"):
 
 # ------------------------------------------------------------------ access
 async def test_organiser_api_is_absent_without_a_token(seeded, make_client, monkeypatch):
-    monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+    # an empty variable beats a token in .env (deleting the variable wouldn't: the settings
+    # would fall back to .env, which is what failed on a machine with ADMIN_TOKEN set)
+    monkeypatch.setenv("ADMIN_TOKEN", "")
     get_settings.cache_clear()
     client = make_client()
     r = await client.get(f"{API}/admin/overview", headers=AUTH)

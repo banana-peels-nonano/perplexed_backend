@@ -11,6 +11,10 @@ export AUTH="Authorization: Bearer $ADMIN_TOKEN"
 
 Never paste the token into a participant-facing screen or a shared chat.
 
+**In a browser instead:** open `/docs` on the server (locally <http://127.0.0.1:8000/docs>),
+click **Authorize**, paste the token, then use any endpoint under `organisers` with
+"Try it out". The token stays in that tab until you close it or log out in the dialog.
+
 ## Phases
 
 ```bash

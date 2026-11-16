@@ -27,9 +27,10 @@ from __future__ import annotations
 import hmac
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.orm.attributes import flag_modified
@@ -57,14 +58,19 @@ ROOT = Path(__file__).resolve().parents[2]
 RELOADABLE = (ROOT / "content", ROOT / "tests" / "fixtures")
 
 
-def require_admin(request: Request) -> None:
+# HTTPBearer (rather than reading the header by hand) puts an "Authorize" button on /docs,
+# so until there's an organiser screen, /docs works as an organiser console in a browser.
+_bearer = HTTPBearer(auto_error=False, scheme_name="Organiser token", description="ADMIN_TOKEN")
+
+
+def require_admin(
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> None:
     token = get_settings().admin_token
     if token is None:
         raise ApiError(404, "NOT_FOUND", "not found")  # no organiser API on this server
-    sent = request.headers.get("authorization", "")
-    scheme, _, value = sent.partition(" ")
-    if scheme.lower() != "bearer" or not hmac.compare_digest(
-        value.encode(), token.get_secret_value().encode()
+    if creds is None or not hmac.compare_digest(
+        creds.credentials.encode(), token.get_secret_value().encode()
     ):
         raise ApiError(401, "ADMIN_UNAUTHENTICATED", "organiser token missing or wrong")
 

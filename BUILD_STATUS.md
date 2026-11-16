@@ -1,6 +1,6 @@
 # PERPLEXED 2.0 — Engineering Status
 
-Last updated: 15 November 2026
+Last updated: 16 November 2026
 
 ## 1. Project objective
 
@@ -23,7 +23,7 @@ Hard deadline: Thursday, 19 November 2026. Frontend API stubs due Monday
 
 ## 3. Architecture decisions
 
-Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
+Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 
 - Modular monolith: one FastAPI service, async throughout.
 - PostgreSQL as the only datastore. **No pgvector, Redis or Celery**: retrieval is
@@ -61,7 +61,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 |---|---|---|
 | Development environment | Done | Docker, Postgres 17, venv, test database |
 | FastAPI foundation | Done | settings, error envelope, health check |
-| Database schema and migrations | Done | migrations 0001–0005 |
+| Database schema and migrations | Done | migrations 0001–0006 |
 | Case format, loader, seed | Done | validated TOML; placeholder case only |
 | Authentication and teams | Done | access codes, sessions, team context |
 | Interview flow | Done | quota, idempotency, one question in flight, refund on failure, memory |
@@ -70,18 +70,18 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 | LLM provider layer | Done | Anthropic provider, fake provider for tests, cost accounting |
 | Hostile-question suite | Done | 27 probes, 0 leaks on the placeholder case |
 | Event engine (phases) | Done | start/pause/resume/extend/end; timed phases close interviews on time |
-| Trust and HR mechanics | Done | per-question trust moves, warning, HR walk-out and timed lockout; numbers are placeholder defaults in event config until the seniors confirm |
-| Portal endpoints | Done | status (phase clock), evidence list, board save/load |
+| Trust and HR mechanics | Done | per-question trust moves; HR per team per department (warning, complaint, 10-minute department lockout); every strike logged for efficiency scoring; numbers are defaults in event config until the seniors confirm |
+| Portal endpoints | Done | status (the team's own clock), evidence list, board, case brief, announcements, projector display |
 | Evidence board | Partial | storage and checks done; UI design pending (frontend team) |
 | Live updates (WebSockets) | Done | notify-then-refetch; session-cookie auth, origin check, tab cap, logout closes that laptop's sockets |
-| Admin and organiser endpoints | Done | token-protected: overview, team view with per-question decisions, fixes, quota, live config, content reload, costs (ORGANISERS.md) |
+| Admin and organiser endpoints | Done | token-protected: team registration, balanced company assignment, time back per team, announcements, prompt-attack alerts, HR log, clues found, team view with per-question decisions, fixes, live config, content reload, costs (ORGANISERS.md) |
 | Real case conversion | Pending | case expected Monday |
 | Alliances | Pending | |
 | Submissions and judging | Pending | |
 | Frontend integration | Pending | frontend owned by another team member |
 | Staging and production deployment | Pending | |
 
-Tests: 149 passing (`python -m pytest -q`).
+Tests: 160 passing (`python -m pytest -q`).
 
 ## 6. Measured so far (placeholder case)
 
@@ -97,26 +97,32 @@ These must be re-measured on the real case.
 
 ## 7. Next
 
-1. Frontend integration once the frontend arrives (FRONTEND.md, OpenAPI at `/docs`).
-2. Real case conversion, its own hostile-question suite and recall test.
-3. Alliances, submissions and judging.
-4. Deployment, backups, load test, rehearsal.
+1. Alliances: cross-company requests, mutual lock, organiser pairing (incl. one
+   three-team alliance), partner evidence after the lock.
+2. Submissions: Audit Findings Sheet with versions, hard deadline, cross-company finding,
+   citations.
+3. Judging: judge accounts, Round 1 and Round 2 rubrics, efficiency data, tie-breakers,
+   final score.
+4. Deployment on an Azure for Students VM (Docker Compose, Caddy, backups), load test.
+5. Real case conversion, its own hostile-question suite and recall test; rehearsal.
+6. Frontend integration once the frontend arrives (FRONTEND.md, OpenAPI at `/docs`).
 
 ## 8. Event-rule questions to resolve
 
 - Number of teams (40–70 or 100+).
 - Question quota per stakeholder.
-- Trust rules and HR: how much each kind of question moves trust, strikes before a walk-out
-  (default 3), lockout length (default 5 minutes); see `app/interview/trust.py`.
+- Trust rules and HR: how much each kind of question moves trust, strikes before a
+  complaint (default 3), department lockout (default 10 minutes, real time; does it pause
+  with the phase?); see `app/interview/trust.py`.
 - Final phase names and durations; event date and timings.
 - Two-round versus four-round format; team-size policy.
 - Whether submissions can be revised.
-- Three-team alliance scoring; tie-breakers; time-add-back procedure.
+- Three-team alliance scoring; rubric criterion names.
 - Evidence board behaviour (frontend design).
 
 ## 9. Current blockers
 
 - Real stakeholder, clue and company-record content (expected Monday).
 - Event-format clarifications above.
-- Final hosting and deployment target.
+- Azure for Students sign-up (chosen host; Render free as staging fallback).
 - Provider rate limits for the event key.

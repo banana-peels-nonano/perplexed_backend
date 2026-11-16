@@ -31,7 +31,7 @@ Every error has the same shape. Switch on `code`, show `message`:
 | `PHASE_CLOSED` | 409 | interviews aren't open in this phase |
 | `QUOTA_EXHAUSTED` | 409 | no questions left for this stakeholder |
 | `QUESTION_IN_FLIGHT` | 409 | a teammate's question to this person is still being answered |
-| `HR_LOCKOUT` | 409 | this person walked out over the team's conduct; `details.retry_after_seconds` says when they'll talk again (the attempt isn't charged) |
+| `HR_LOCKOUT` | 409 | someone in this person's department filed an HR complaint over the team's conduct; the whole department is closed to the team. `details.retry_after_seconds` says when it reopens, `details.department` which one (the attempt isn't charged) |
 | `PROVIDER_BUSY` | 503 | try again in a few seconds (the question was not charged) |
 | `BOARD_CONFLICT` | 409 | someone saved the board first: reload, reapply, save |
 | `UNKNOWN_EVIDENCE`, `BAD_QUOTE` | 422 | the board refers to something the team can't use |
@@ -52,8 +52,11 @@ Every error has the same shape. Switch on `code`, show `message`:
     interview over hostile questioning (show it as a notice, not as their speech).
 - `GET /stakeholders/{id}/messages` is the team's whole thread with that person, the same
   on every laptop. Messages have `role` `question`, `answer` or `notice` (the HR walk-out).
-- Each stakeholder in `GET /stakeholders` and `GET /status` has `available_in_seconds`:
-  0 normally, or the time left on an HR lockout. Show a countdown and disable asking.
+- Each stakeholder in `GET /stakeholders` and `GET /status` has `department` and
+  `available_in_seconds`: 0 normally, or the time left on an HR lockout. **A lockout
+  covers the whole department** (10 minutes by default), so every stakeholder in it shows
+  the same countdown. Show the HR pop-up on the `hr_notice`, then the countdown on that
+  department's stakeholders, and disable asking them.
 
 ## 4. Evidence cards
 
@@ -66,7 +69,16 @@ Each card has `passage_id`, `record_id`, `record_title`, `excerpt`, `mode` and `
 - `GET /evidence` lists every card the team has, from any stakeholder, with who disclosed
   it, when, and the record's date.
 
-## 5. What the UI must never do
+## 5. Brief and announcements
+
+- `GET /brief` → `{"case": "...", "company": {"id", "name", "brief"} | null}`. Both texts are
+  markdown. `company` is `null` until the team is assigned one.
+- `GET /announcements` → organiser broadcasts for this team, newest first
+  (`id`, `text`, `created_at`). Some go to one company only; the server filters.
+- `GET /display` needs **no login**: it's for the projector. Event name, phase and clock,
+  and the five newest broadcasts meant for everyone. Nothing team-specific.
+
+## 6. What the UI must never do
 
 - **Never show trust**, or anything that suggests it: no meter, no mood indicator. Trust is
   hidden by the rules and the API doesn't expose it.
@@ -77,7 +89,7 @@ Each card has `passage_id`, `record_id`, `record_title`, `excerpt`, `mode` and `
 - **Never draw links between cards automatically.** Only the team draws links. Automatic
   links would do the deduction the competition is judging.
 
-## 6. Keeping laptops in sync
+## 7. Keeping laptops in sync
 
 Open one WebSocket per tab: `new WebSocket("wss://<same host>/api/v1/ws")`. The session
 cookie is sent automatically (same origin). The socket only says **what changed**; you
@@ -92,6 +104,8 @@ refetch it through the normal endpoints. It never carries content.
 | `{"type": "evidence"}` | `GET /evidence` |
 | `{"type": "board", "version": 4}` | `GET /board` if your version is older |
 | `{"type": "content"}` | everything on screen (the case was reloaded) |
+| `{"type": "team"}` | `GET /status` and `GET /brief` (the team's company was assigned or changed) |
+| `{"type": "announcement"}` | `GET /announcements` (new or retracted broadcast) |
 | `{"type": "ping"}` | nothing (keep-alive every 25 s) |
 
 Close codes: `4401` not logged in or logged out → login screen; `4403` wrong origin;
@@ -101,12 +115,14 @@ aren't replayed).
 
 - Count down from `remaining_seconds` in `GET /status`, correcting with `server_time`.
   `remaining_seconds` is `null` for a phase with no timer; `phase` is `null` between phases.
+  It's **this team's** time: organisers can give a team time back after a crash, so two
+  teams can see different clocks. Don't take the clock from `/display` for a team screen.
 - Use `interviews_open` to enable asking. It turns false when organisers pause, when the
   phase changes, and when a timed phase runs out of time (no event is sent for that; your
   countdown reaching zero is the signal).
 - An HR lockout ending also sends no event: count down `available_in_seconds`.
 
-## 7. Evidence board
+## 8. Evidence board
 
 `GET /board` and `PUT /board` with:
 
@@ -132,16 +148,15 @@ aren't replayed).
 - **`extra`:** yours for anything UI-specific (hypotheses, layout, view settings), up to 32 KB.
 - Card ids: 1–64 of `A–Z a–z 0–9 _ -`. Limits: 300 cards, 600 links.
 
-## 8. Content
+## 9. Content
 
 The current case (Northfield) is a **placeholder**; the real case arrives Monday. Don't
 hardcode stakeholder names, ids or counts: there are 3–5 stakeholders per company and 2
 companies, and everything comes from the API.
 
-## 9. Coming next
+## 10. Coming next
 
-- Organiser controls (phases, pause, extend).
-- WebSocket notifications.
-- Alliances, submissions and judging.
+- Alliances (requests, confirmation, partner evidence).
+- Submissions (the Audit Findings Sheet) and judging.
 
 This file is updated whenever the API changes.

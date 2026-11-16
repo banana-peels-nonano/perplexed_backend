@@ -13,12 +13,15 @@ classifier's verdict on that question:
 So five sharp, polite questions take a stakeholder from 50 (neutral) to 70 (open);
 two hostile ones take them from 50 to 30 (guarded).
 
-HR: hostile and prompt_attack questions are strikes against that stakeholder. The
-second-to-last strike makes them warn the team (in character); the last one ends the
-interview: the question is still charged, the stakeholder files an HR complaint, and
-won't talk to that team for `lockout_seconds`. When the lockout ends, strikes reset.
-The lockout is visible on purpose: it is a consequence of the team's own conduct, not a
-clue about hidden content.
+HR (per team, per department, as the checklist asks): hostile and prompt_attack questions
+are strikes against the department of the stakeholder they were put to. The
+second-to-last strike makes the stakeholder warn the team (in character); the last one
+ends the interview: the question is still charged, the stakeholder files an HR complaint,
+and nobody in that department will talk to the team for `lockout_seconds` (default 10
+minutes, real time: it keeps counting through a pause). When the lockout ends, the
+department's strikes reset. Every strike is logged in hr_flag for interview-efficiency
+scoring. The lockout is visible on purpose: it is a consequence of the team's own
+conduct, not a clue about hidden content.
 """
 
 from __future__ import annotations
@@ -43,7 +46,7 @@ DEFAULT_TRUST_RULES: dict[str, Any] = {
 DEFAULT_HR: dict[str, Any] = {
     "strike_labels": ["hostile", "prompt_attack"],
     "strikes_to_lockout": 3,
-    "lockout_seconds": 300,
+    "lockout_seconds": 600,
 }
 
 

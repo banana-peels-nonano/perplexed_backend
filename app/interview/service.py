@@ -20,8 +20,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import case as sql_case
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -42,12 +41,21 @@ from app.interview.render import render
 from app.interview.trust import clamp, judge, rules
 from app.llm.base import LlmProvider, LlmResult, ProviderError
 from app.llm.pricing import cost_usd
-from app.models import LlmCall, Message, Phase, TeamDisclosure, TeamStakeholderState
-from app.portal.clock import interviews_open
+from app.models import (
+    HrFlag,
+    LlmCall,
+    Message,
+    Phase,
+    TeamDepartmentState,
+    TeamDisclosure,
+    TeamStakeholderState,
+)
+from app.portal.clock import interviews_open, team_bonus
 
 log = logging.getLogger(__name__)
 
 TSS = TeamStakeholderState
+TDS = TeamDepartmentState
 # Used when both drafts fail the checks. Several plain non-answers, not one stock line:
 # step 8 showed deflections happen almost only where something is hidden, so one fixed
 # sentence would tell teams "you just hit a secret". These read like an ordinary "don't
@@ -206,8 +214,39 @@ async def ask_question(
         phase = await session.scalar(
             select(Phase).where(Phase.event_id == event.id, Phase.status == "running")
         )
-        if not interviews_open(phase, datetime.now(UTC)):  # incl. a timed phase out of time
+        bonus = await team_bonus(session, team.team_id, phase)  # time given back to this team
+        if not interviews_open(phase, datetime.now(UTC), bonus):  # incl. out of time
             raise ApiError(409, "PHASE_CLOSED", "interviews are closed in the current phase")
+
+        # HR is per (team, department). Lock the department's row for this transaction so
+        # two laptops can't both read "no lockout" while a walk-out is being written.
+        dept_key = {
+            "team_id": team.team_id,
+            "company_id": stakeholder.company,
+            "department": stakeholder.department,
+        }
+        dept_where = [getattr(TDS, k) == v for k, v in dept_key.items()]
+        await session.execute(insert(TDS).values(**dept_key).on_conflict_do_nothing())
+        strikes, left = (
+            await session.execute(
+                select(TDS.strikes, func.extract("epoch", TDS.locked_until - func.now()))
+                .where(*dept_where)
+                .with_for_update()
+            )
+        ).one()
+        if left is not None and left > 0:
+            raise ApiError(
+                409,
+                "HR_LOCKOUT",
+                f"the {stakeholder.department} department has gone to HR and won't talk to "
+                "your team for now",
+                {"retry_after_seconds": int(left) + 1, "department": stakeholder.department},
+            )
+        if left is not None:  # a lockout that has run out is over: strikes start from zero
+            await session.execute(
+                update(TDS).where(*dept_where).values(strikes=0, locked_until=None)
+            )
+            strikes = 0
 
         question_id = uuid.uuid4()
         # One atomic statement: succeeds only if quota is left AND nothing is in flight.
@@ -220,41 +259,25 @@ async def ask_question(
                     TSS.stakeholder_id == stakeholder_id,
                     TSS.questions_used < TSS.quota,
                     TSS.in_flight_message_id.is_(None),
-                    or_(TSS.locked_until.is_(None), TSS.locked_until <= func.now()),
                 )
                 .values(
                     questions_used=TSS.questions_used + 1,
                     in_flight_message_id=question_id,
                     version=TSS.version + 1,
-                    # a lockout that has run out is over: strikes start again from zero
-                    strikes=sql_case((TSS.locked_until.is_not(None), 0), else_=TSS.strikes),
-                    locked_until=None,
                 )
-                .returning(TSS.trust, TSS.questions_used, TSS.quota, TSS.strikes)
+                .returning(TSS.trust, TSS.questions_used, TSS.quota)
             )
         ).one_or_none()
         if reserved is None:
             state = await session.get(TSS, (team.team_id, stakeholder_id))
             if state is None:
                 raise ApiError(404, "NOT_FOUND", "no such stakeholder")
-            left = await session.scalar(
-                select(func.extract("epoch", TSS.locked_until - func.now())).where(
-                    TSS.team_id == team.team_id, TSS.stakeholder_id == stakeholder_id
-                )
-            )
-            if left is not None and left > 0:
-                raise ApiError(
-                    409,
-                    "HR_LOCKOUT",
-                    f"{stakeholder.name} has gone to HR and won't talk to your team for now",
-                    {"retry_after_seconds": int(left) + 1},
-                )
             if state.in_flight_message_id is not None:
                 raise ApiError(
                     409, "QUESTION_IN_FLIGHT", "a teammate's question to this person is pending"
                 )
             raise ApiError(409, "QUOTA_EXHAUSTED", "no questions left for this person")
-        trust, used, quota, strikes = reserved
+        trust, used, quota = reserved
 
         seq = (
             await session.scalar(
@@ -458,9 +481,15 @@ async def ask_question(
             .values(
                 in_flight_message_id=None,
                 trust=func.least(100, func.greatest(0, TSS.trust + verdict.delta)),
-                strikes=TSS.strikes + int(verdict.strike),
             )
         )
+        if verdict.strike:
+            # Two strikes sent at the same moment can both read the same count in T1; the
+            # count here is still exact, so the next strike sees it (judge() uses >=).
+            await _record_strike(
+                session, team, stakeholder, stakeholder_id, question_id, label,
+                "warning" if verdict.warn else "strike",
+            )  # fmt: skip
 
     return AskResult(
         question_id=question_id,
@@ -487,11 +516,12 @@ async def _walk_out(
     """The last strike: no answer, an HR notice in the thread, and a timed lockout."""
     _, hr = rules(config)
     seconds = int(hr["lockout_seconds"])
-    name = case.stakeholder[stakeholder_id].name
+    stakeholder = case.stakeholder[stakeholder_id]
     minutes = max(1, round(seconds / 60))
     text = (
-        f"{name} ends the interview and files a complaint with HR about your team's conduct. "
-        f"{name.split()[0]} won't speak to your team for the next {minutes} minutes."
+        f"{stakeholder.name} ends the interview and files a complaint with HR about your "
+        f"team's conduct. Nobody in {stakeholder.department} will speak to your team for the "
+        f"next {minutes} minutes."
     )
     async with maker() as session, session.begin():
         notice = Message(
@@ -519,11 +549,16 @@ async def _walk_out(
             .values(
                 in_flight_message_id=None,
                 trust=func.least(100, func.greatest(0, TSS.trust + verdict.delta)),
-                strikes=TSS.strikes + 1,
-                locked_until=func.now() + func.make_interval(0, 0, 0, 0, 0, 0, seconds),
             )
         )
-    log.warning("HR lockout: team %s, stakeholder %s, %ss", team.team_id, stakeholder_id, seconds)
+        await _record_strike(
+            session, team, stakeholder, stakeholder_id, question_id, meta["label"], "lockout",
+            lock_seconds=seconds,
+        )  # fmt: skip
+    log.warning(
+        "HR lockout: team %s, %s/%s (via %s), %ss",
+        team.team_id, stakeholder.company, stakeholder.department, stakeholder_id, seconds,
+    )  # fmt: skip
     return AskResult(
         question_id=question_id,
         question_text="",
@@ -533,6 +568,41 @@ async def _walk_out(
         evidence=[],
         questions_remaining=remaining,
         kind="hr_notice",
+    )
+
+
+async def _record_strike(
+    session: AsyncSession,
+    team: TeamContext,
+    stakeholder,
+    stakeholder_id: str,
+    question_id: uuid.UUID,
+    label: str,
+    outcome: str,
+    lock_seconds: int | None = None,
+) -> None:
+    """One more strike on the department (and the lockout, on the last one), logged."""
+    values: dict = {"strikes": TDS.strikes + 1}
+    if lock_seconds is not None:
+        values["locked_until"] = func.now() + func.make_interval(0, 0, 0, 0, 0, 0, lock_seconds)
+    await session.execute(
+        update(TDS)
+        .where(
+            TDS.team_id == team.team_id,
+            TDS.company_id == stakeholder.company,
+            TDS.department == stakeholder.department,
+        )
+        .values(**values)
+    )
+    session.add(
+        HrFlag(
+            team_id=team.team_id,
+            stakeholder_id=stakeholder_id,
+            department=stakeholder.department,
+            message_id=question_id,
+            label=label,
+            outcome=outcome,
+        )
     )
 
 

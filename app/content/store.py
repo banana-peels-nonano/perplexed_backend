@@ -56,6 +56,7 @@ async def load_case_from_db(session: AsyncSession) -> Case:
     data = {
         "schema_version": 1,
         "case_id": event.case_id,
+        "brief": event.brief,
         "phases": list(
             await session.scalars(
                 select(Phase.key).where(Phase.event_id == event.id).order_by(Phase.seq)
@@ -63,7 +64,12 @@ async def load_case_from_db(session: AsyncSession) -> Case:
         ),
         "labels": event.config.get("labels", DEFAULT_LABELS),
         "company": {
-            c.id: {"name": c.name, "departments": departments.get(c.id, []), "topics": c.topics}
+            c.id: {
+                "name": c.name,
+                "departments": departments.get(c.id, []),
+                "topics": c.topics,
+                "brief": c.brief,
+            }
             for c in await session.scalars(select(Company))
         },
         "stakeholder": {

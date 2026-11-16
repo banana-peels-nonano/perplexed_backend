@@ -38,6 +38,16 @@ class Company(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)  # 'A', 'B'
     name: Mapped[str] = mapped_column(Text)
     topics: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=sql_text("'{}'"))
+    brief: Mapped[str] = mapped_column(Text, server_default=sql_text("''"))  # its teams only
+
+
+class Clue(Base):
+    """Judge-only: what each clue id means. Passages point here via passage.clue_id."""
+
+    __tablename__ = "clue"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    description: Mapped[str] = mapped_column(Text)
 
 
 class Department(Base):

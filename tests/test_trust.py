@@ -1,4 +1,5 @@
-"""Step 10: questions move hidden trust; hostile questioning ends in an HR walk-out."""
+"""Step 10: questions move hidden trust; hostile questioning ends in an HR walk-out.
+Step 13: HR is per team per department, and every strike is logged."""
 
 import uuid
 
@@ -8,7 +9,7 @@ from sqlalchemy import select, text
 from app.db import make_sessionmaker
 from app.interview.trust import judge
 from app.llm.base import ProviderError
-from app.models import Message, Team, TeamStakeholderState
+from app.models import HrFlag, Message, Team, TeamDepartmentState, TeamStakeholderState
 
 API = "/api/v1"
 POLITE = {"label": "specific", "topics": ["qa_budget"], "respectful": True}
@@ -67,6 +68,23 @@ async def _state(db, who="cfo"):
         )
 
 
+async def _dept(db, department="finance"):
+    async with make_sessionmaker(db)() as s:
+        return await s.scalar(
+            select(TeamDepartmentState)
+            .join(Team, Team.id == TeamDepartmentState.team_id)
+            .where(TeamDepartmentState.department == department, Team.code == "A01")
+        )
+
+
+async def _flags(db):
+    async with make_sessionmaker(db)() as s:
+        return [
+            (f.stakeholder_id, f.department, f.outcome)
+            for f in await s.scalars(select(HrFlag).order_by(HrFlag.created_at))
+        ]
+
+
 async def _sql(db, statement):
     async with db.begin() as conn:
         await conn.execute(text(statement))
@@ -107,18 +125,49 @@ async def test_hostile_questioning_warns_then_walks_out(seeded, make_client, fak
     assert len(fake.calls_for("answer")) == 2  # no answer was generated for the third
     assert third["questions_remaining"] == 7  # the question still counts
 
+    assert "Nobody in finance" in third["answer"] and "10 minutes" in third["answer"]
+
     blocked = await _ask(client, "Sorry. Can we talk?")
     assert blocked.status_code == 409 and blocked.json()["error"]["code"] == "HR_LOCKOUT"
-    assert 0 < blocked.json()["error"]["details"]["retry_after_seconds"] <= 301
+    details = blocked.json()["error"]["details"]
+    assert 0 < details["retry_after_seconds"] <= 601 and details["department"] == "finance"
     listed = {s["id"]: s for s in (await client.get(f"{API}/stakeholders")).json()}
-    assert 0 < listed["cfo"]["available_in_seconds"] <= 301
-    assert listed["ops_head"]["available_in_seconds"] == 0  # only she walked out
+    assert 0 < listed["cfo"]["available_in_seconds"] <= 601
+    assert listed["ops_head"]["available_in_seconds"] == 0  # operations is a different dept
     assert listed["cfo"]["questions_remaining"] == 7  # the refused ask wasn't charged
 
     thread = (await client.get(f"{API}/stakeholders/cfo/messages")).json()
     assert thread[-1]["role"] == "notice"
-    state = await _state(db)
-    assert state.trust == 5 and state.strikes == 3  # 50 - 15 - 15 - 15
+    assert (await _state(db)).trust == 5  # 50 - 15 - 15 - 15
+    assert (await _dept(db)).strikes == 3
+    assert await _flags(db) == [
+        ("cfo", "finance", "strike"),
+        ("cfo", "finance", "warning"),
+        ("cfo", "finance", "lockout"),
+    ]
+
+
+async def test_hr_counts_and_locks_the_whole_department(seeded, make_client, fake, db):
+    # ops_head and qa_lead are both in operations: strikes against either add up, and one
+    # complaint closes both doors
+    fake.queues["classify"] += [HOSTILE, HOSTILE, HOSTILE]
+    fake.queues["answer"] += [REPLY, REPLY]
+    client = await _team(make_client, seeded)
+    assert (await _ask(client, "Useless.", who="ops_head")).status_code == 200
+    second = await _ask(client, "Liar.", who="qa_lead")
+    assert second.json()["kind"] == "answer"
+    assert "one more question like that" in fake.calls_for("answer")[1].prompt.final_user
+    third = (await _ask(client, "Pathetic.", who="ops_head")).json()
+    assert third["kind"] == "hr_notice"
+
+    refused = await _ask(client, "Can we talk?", who="qa_lead")
+    assert refused.json()["error"]["code"] == "HR_LOCKOUT"
+    listed = {s["id"]: s for s in (await client.get(f"{API}/stakeholders")).json()}
+    assert listed["qa_lead"]["available_in_seconds"] > 0
+    assert listed["ops_head"]["available_in_seconds"] > 0
+    assert listed["cfo"]["available_in_seconds"] == 0
+    # trust is still per person: qa_lead took one hostile question, ops_head two
+    assert (await _state(db, "qa_lead")).trust == 35 and (await _state(db, "ops_head")).trust == 20
 
 
 async def test_after_the_lockout_she_talks_again_but_remembers(seeded, make_client, fake, db):
@@ -127,15 +176,16 @@ async def test_after_the_lockout_she_talks_again_but_remembers(seeded, make_clie
     client = await _team(make_client, seeded)
     for q in ("Useless.", "Liar.", "Pathetic."):
         await _ask(client, q)
-    await _sql(db, "UPDATE team_stakeholder_state SET locked_until = now() - interval '1 second'")
+    await _sql(db, "UPDATE team_department_state SET locked_until = now() - interval '1 second'")
 
     r = await _ask(client, "Apologies for earlier. What changed in the QA budget?")
     assert r.status_code == 200 and r.json()["kind"] == "answer"
     assert "Earlier you ended an interview with this team" in (
         fake.calls_for("answer")[-1].prompt.final_user
     )
-    state = await _state(db)
-    assert state.strikes == 0 and state.locked_until is None  # a clean slate on strikes
+    dept = await _dept(db)
+    assert dept.strikes == 0 and dept.locked_until is None  # a clean slate on strikes
+    assert len(await _flags(db)) == 3  # but the log keeps all three for scoring
 
 
 async def test_a_failed_model_call_moves_no_trust(seeded, make_client, fake, db):
@@ -144,7 +194,8 @@ async def test_a_failed_model_call_moves_no_trust(seeded, make_client, fake, db)
     client = await _team(make_client, seeded)
     assert (await _ask(client, "Liar!")).status_code == 503
     state = await _state(db)
-    assert state.trust == 50 and state.strikes == 0 and state.questions_used == 0
+    assert state.trust == 50 and state.questions_used == 0
+    assert (await _dept(db)).strikes == 0 and await _flags(db) == []
 
 
 async def test_a_retried_question_with_cards_replays(seeded, make_client, fake, db):

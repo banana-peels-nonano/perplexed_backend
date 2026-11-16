@@ -15,6 +15,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -50,6 +51,7 @@ class Event(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     name: Mapped[str] = mapped_column(Text)
     case_id: Mapped[str] = mapped_column(Text)
+    brief: Mapped[str] = mapped_column(Text, server_default=sql_text("''"))  # shown to all
     config: Mapped[dict] = mapped_column(JSONB, server_default=sql_text("'{}'::jsonb"))
     created_at: Mapped[datetime] = _created_at()
 
@@ -110,7 +112,8 @@ class TeamSession(Base):
 
 
 class TeamStakeholderState(Base):
-    """Hidden per-(team, stakeholder) state: trust, quota, the in-flight guard, HR strikes."""
+    """Hidden per-(team, stakeholder) state: trust, quota, the in-flight guard.
+    HR strikes and lockouts are per department: TeamDepartmentState."""
 
     __tablename__ = "team_stakeholder_state"
     __table_args__ = (
@@ -126,9 +129,77 @@ class TeamStakeholderState(Base):
     # set while a question is being answered; no FK to keep the two tables independent
     in_flight_message_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     version: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))
-    # HR (app/interview/trust.py): strikes towards a complaint, and the lockout it causes
+
+
+class TeamDepartmentState(Base):
+    """HR, per (team, department): strikes towards a complaint and the lockout it causes.
+
+    A complaint from one stakeholder closes the whole department to the team (checklist:
+    "hostility counter per team per department", "10-minute department lockout").
+    Rows are created on a team's first question to the department.
+    """
+
+    __tablename__ = "team_department_state"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "department"],
+            ["department.company_id", "department.name"],
+            name="fk_team_department_state_department",
+        ),
+        CheckConstraint("strikes >= 0", name="strikes"),
+    )
+
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    department: Mapped[str] = mapped_column(Text, primary_key=True)
     strikes: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class HrFlag(Base):
+    """Every strike, kept for good: the organisers' log and interview-efficiency scoring.
+
+    outcome: 'strike' (counted), 'warning' (one short of a complaint), 'lockout'.
+    """
+
+    __tablename__ = "hr_flag"
+    __table_args__ = (
+        CheckConstraint("outcome IN ('strike', 'warning', 'lockout')", name="outcome"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), index=True)
+    stakeholder_id: Mapped[str] = mapped_column(ForeignKey("stakeholder.id"))
+    department: Mapped[str] = mapped_column(Text)
+    message_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("message.id"))
+    label: Mapped[str] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class TeamTimeBonus(Base):
+    """Extra seconds one team gets in one phase (organisers give time back after a crash).
+    Only that team's clock and interview gate move; the phase itself doesn't."""
+
+    __tablename__ = "team_time_bonus"
+    __table_args__ = (CheckConstraint("seconds >= 0", name="seconds"),)
+
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), primary_key=True)
+    phase_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("phase.id"), primary_key=True)
+    seconds: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))
+
+
+class Announcement(Base):
+    """A broadcast from the organisers. company_id None = everyone (and the projector)."""
+
+    __tablename__ = "announcement"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("event.id"))
+    company_id: Mapped[str | None] = mapped_column(ForeignKey("company.id"))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created_at()
+    retracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Message(Base):

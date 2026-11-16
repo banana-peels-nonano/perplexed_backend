@@ -42,6 +42,7 @@ class Company(_Strict):
     name: str
     departments: list[str]
     topics: list[str]
+    brief: str = ""  # what this company's teams read before interviewing (markdown)
 
 
 class Stakeholder(_Strict):
@@ -142,6 +143,7 @@ class SmokeConversation(_Strict):
 class Case(_Strict):
     schema_version: Literal[1]
     case_id: str
+    brief: str = ""  # the shared introduction every team reads (markdown)
     phases: list[str]
     labels: list[str]
     company: dict[str, Company]
@@ -235,4 +237,15 @@ class Case(_Strict):
                         if mentions(own, fp):
                             errors.append(f"stakeholder {sid}: persona/beliefs contain {pid}'s "
                                           f"fingerprint {fp!r}")  # fmt: skip
+        # briefs go to participants as they are: they must not hand out hidden evidence
+        briefs = [("case brief", self.brief, None)] + [
+            (f"company {cid} brief", c.brief, cid) for cid, c in self.company.items()
+        ]
+        for where, text, company in briefs:
+            for pid, p in self.passage.items():
+                if company is not None and self.company_of_passage(pid) != company:
+                    continue
+                for fp in p.fingerprints:
+                    if text and mentions(text, fp):
+                        errors.append(f"{where} contains {pid}'s fingerprint {fp!r}")
         return errors

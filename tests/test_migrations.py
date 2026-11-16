@@ -32,6 +32,11 @@ EXPECTED_TABLES = {
     "team_disclosure",
     "team_board",
     "llm_call",
+    "team_department_state",
+    "hr_flag",
+    "team_time_bonus",
+    "announcement",
+    "clue",
 }
 
 

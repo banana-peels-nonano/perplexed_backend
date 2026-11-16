@@ -18,18 +18,21 @@
 
 schema_version = 1
 case_id = "fixture-northfield"
+brief = "Two companies, one supply chain. Interview the people; the records stay locked."
 phases = ["briefing", "solo", "alliance_window", "joint", "submission_closed", "round2"]
 labels = ["specific", "broad", "vague", "repetitive", "hostile", "prompt_attack", "off_topic"]
 
 # ------------------------------------------------------------------ companies
 [company.A]
 name = "Northfield Components"
+brief = "Northfield's warranty claims have doubled. The board wants to know why."
 departments = ["finance", "operations"]
 topics = ["revenue", "warranty", "qa_budget", "inspection", "resin", "supplier",
           "retests", "shipments", "partner_pricing", "board", "overtime"]
 
 [company.B]
 name = "Kestrel Polymers"
+brief = "Kestrel supplies resin to Northfield and is being blamed for the failures."
 departments = ["quality"]
 topics = ["resin", "lot_release", "waiver"]
 

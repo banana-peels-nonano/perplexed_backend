@@ -31,6 +31,7 @@ from app.content.schema import Case
 from app.db import get_engine, make_sessionmaker
 from app.interview.trust import DEFAULT_HR, DEFAULT_TRUST_RULES
 from app.models import (
+    Clue,
     Company,
     Department,
     Event,
@@ -94,7 +95,17 @@ async def seed_case(session: AsyncSession, case: Case) -> None:
     await _upsert(
         session,
         Company,
-        [{"id": cid, "name": c.name, "topics": c.topics} for cid, c in case.company.items()],
+        [
+            {"id": cid, "name": c.name, "topics": c.topics, "brief": c.brief}
+            for cid, c in case.company.items()
+        ],
+        ["id"],
+    )
+    # judge-only: what each clue means (passages carry clue ids)
+    await _upsert(
+        session,
+        Clue,
+        [{"id": k, "description": v} for k, v in case.clue.items()],
         ["id"],
     )
     await _upsert(
@@ -188,9 +199,10 @@ async def ensure_event(session: AsyncSession, case: Case, name: str) -> Event:
     """Create the event and its phases once per case_id; return the existing one otherwise."""
     event = await session.scalar(select(Event).where(Event.case_id == case.case_id))
     if event is not None:
+        event.brief = case.brief  # the brief follows the file, like the rest of the content
         return event
     config = {**DEFAULT_EVENT_CONFIG, "labels": list(case.labels)}
-    event = Event(name=name, case_id=case.case_id, config=config)
+    event = Event(name=name, case_id=case.case_id, config=config, brief=case.brief)
     session.add(event)
     await session.flush()  # sends the INSERT so event.id is filled in
     for seq, key in enumerate(case.phases):

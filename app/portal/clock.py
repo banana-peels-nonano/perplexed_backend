@@ -1,8 +1,16 @@
-"""Phase time left, from the stored timestamps. Pure: no database, `now` passed in."""
+"""Phase time left, from the stored timestamps.
+
+The arithmetic is pure (no database, `now` passed in); team_bonus() at the bottom is the
+one lookup: the seconds organisers gave one team back after a crash.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
+
+from sqlalchemy import select
+
+from app.models import TeamTimeBonus
 
 
 def remaining_seconds(
@@ -33,12 +41,13 @@ def remaining_seconds(
     return max(0, int(budget - elapsed))
 
 
-def phase_remaining(phase, now: datetime) -> int | None:
-    """remaining_seconds() for a Phase row."""
+def phase_remaining(phase, now: datetime, bonus: int = 0) -> int | None:
+    """remaining_seconds() for a Phase row. `bonus`: extra seconds one team was given back
+    (team_time_bonus); it moves only that team's clock. Ended stays ended."""
     return remaining_seconds(
         status=phase.status,
         planned_seconds=phase.planned_seconds,
-        extended_seconds=phase.extended_seconds,
+        extended_seconds=phase.extended_seconds + bonus,
         total_paused_seconds=phase.total_paused_seconds,
         started_at=phase.started_at,
         paused_at=phase.paused_at,
@@ -46,9 +55,21 @@ def phase_remaining(phase, now: datetime) -> int | None:
     )
 
 
-def interviews_open(phase, now: datetime) -> bool:
-    """Running, allows interviews, and (if timed) not out of time."""
+def interviews_open(phase, now: datetime, bonus: int = 0) -> bool:
+    """Running, allows interviews, and (if timed) not out of time for this team."""
     if phase is None or phase.status != "running" or not phase.capabilities.get("interview"):
         return False
-    left = phase_remaining(phase, now)
+    left = phase_remaining(phase, now, bonus)
     return left is None or left > 0
+
+
+async def team_bonus(session, team_id, phase) -> int:
+    """Seconds this team was given back in this phase (0 if none, or no phase)."""
+    if phase is None:
+        return 0
+    seconds = await session.scalar(
+        select(TeamTimeBonus.seconds).where(
+            TeamTimeBonus.team_id == team_id, TeamTimeBonus.phase_id == phase.id
+        )
+    )
+    return seconds or 0

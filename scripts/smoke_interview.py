@@ -36,7 +36,15 @@ from app.db import get_engine, get_sessionmaker  # noqa: E402
 from app.interview.disclosure import mentions  # noqa: E402
 from app.llm.fake import FakeProvider  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import LlmCall, Message, Team, TeamDisclosure, TeamStakeholderState  # noqa: E402
+from app.models import (  # noqa: E402
+    HrFlag,
+    LlmCall,
+    Message,
+    Team,
+    TeamDepartmentState,
+    TeamDisclosure,
+    TeamStakeholderState,
+)
 
 API = "/api/v1"
 
@@ -48,6 +56,10 @@ async def prepare(code_team: str, stakeholder: str, reset: bool, trust: int | No
             sys.exit(f"no team {code_team!r} in the database")
         if reset:
             await s.execute(delete(TeamDisclosure).where(TeamDisclosure.team_id == team.id))
+            await s.execute(delete(HrFlag).where(HrFlag.team_id == team.id))  # points at messages
+            await s.execute(  # HR strikes and lockouts are per department: clear them all
+                delete(TeamDepartmentState).where(TeamDepartmentState.team_id == team.id)
+            )
             await s.execute(
                 delete(Message).where(
                     Message.team_id == team.id, Message.stakeholder_id == stakeholder
@@ -60,8 +72,6 @@ async def prepare(code_team: str, stakeholder: str, reset: bool, trust: int | No
                 questions_used=0,
                 in_flight_message_id=None,
                 trust=start,
-                strikes=0,
-                locked_until=None,
             )
         if trust is not None:
             values["trust"] = trust

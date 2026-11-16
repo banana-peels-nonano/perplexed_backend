@@ -164,7 +164,7 @@ async def test_quota_and_live_config(seeded, make_client, fake, admin_on):
     )
     assert r.status_code == 200
     config = (await org.get(f"{API}/admin/config", headers=AUTH)).json()
-    assert config["hr"]["strikes_to_lockout"] == 1 and config["hr"]["lockout_seconds"] == 300
+    assert config["hr"]["strikes_to_lockout"] == 1 and config["hr"]["lockout_seconds"] == 600
     assert config["max_passages"] == 3 and config["tier_thresholds"]["open"] == 70  # kept
     fake.queues["classify"].append(HOSTILE)
     assert (await _ask(team, "Liar.")).json()["kind"] == "hr_notice"  # takes effect live

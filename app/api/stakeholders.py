@@ -1,7 +1,8 @@
 """GET /stakeholders and GET /stakeholders/{id}: the team's own company only.
 
 Trust is hidden by the rules, so it never appears in any response. Questions remaining
-does, and so does an HR lockout (a visible consequence of the team's own conduct).
+does, and so does an HR lockout (a visible consequence of the team's own conduct). A
+lockout covers the whole department, so every stakeholder in it shows the same countdown.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from sqlalchemy import and_, select
 
 from app.api.errors import ApiError
 from app.auth.context import CurrentTeam, DbSession, TeamContext
-from app.models import Stakeholder, TeamStakeholderState
+from app.models import Stakeholder, TeamDepartmentState, TeamStakeholderState
 
 router = APIRouter(tags=["stakeholders"])
 
@@ -25,14 +26,17 @@ class StakeholderOut(BaseModel):
     role: str
     department: str
     questions_remaining: int
-    # seconds until they'll talk to the team again after an HR walk-out (0 = available)
+    # seconds until their department talks to the team again after an HR complaint
+    # (0 = available); the same for everyone in the department
     available_in_seconds: int = 0
 
 
 def _query(team: TeamContext):
-    # LEFT JOIN: a stakeholder with no state row yet still appears (0 remaining)
+    # LEFT JOINs: a stakeholder with no state row yet still appears (0 remaining), and a
+    # department the team hasn't questioned yet has no HR row
+    tds = TeamDepartmentState
     return (
-        select(Stakeholder, TeamStakeholderState)
+        select(Stakeholder, TeamStakeholderState, tds.locked_until)
         .outerjoin(
             TeamStakeholderState,
             and_(
@@ -40,17 +44,31 @@ def _query(team: TeamContext):
                 TeamStakeholderState.team_id == team.team_id,
             ),
         )
+        .outerjoin(
+            tds,
+            and_(
+                tds.team_id == team.team_id,
+                tds.company_id == Stakeholder.company_id,
+                tds.department == Stakeholder.department,
+            ),
+        )
         .where(Stakeholder.company_id == team.company_id, Stakeholder.is_active.is_(True))
     )
 
 
-def _out(s: Stakeholder, state: TeamStakeholderState | None) -> StakeholderOut:
+def seconds_until(locked_until: datetime | None, now: datetime | None = None) -> int:
+    """Whole seconds left on a lockout, rounded up; 0 when there is none or it has passed."""
+    now = now or datetime.now(UTC)
+    if locked_until is None or locked_until <= now:
+        return 0
+    return int((locked_until - now).total_seconds()) + 1
+
+
+def _out(
+    s: Stakeholder, state: TeamStakeholderState | None, locked_until: datetime | None = None
+) -> StakeholderOut:
     remaining = (state.quota - state.questions_used) if state else 0
-    locked = 0
-    if state is not None and state.locked_until is not None:
-        locked = max(0, int((state.locked_until - datetime.now(UTC)).total_seconds()) + 1)
-        if state.locked_until <= datetime.now(UTC):
-            locked = 0
+    locked = seconds_until(locked_until)
     return StakeholderOut(
         id=s.id,
         name=s.name,
@@ -70,7 +88,7 @@ def _require_company(team: TeamContext) -> None:
 async def list_stakeholders(team: CurrentTeam, session: DbSession) -> list[StakeholderOut]:
     _require_company(team)
     rows = (await session.execute(_query(team).order_by(Stakeholder.sort_order))).all()
-    return [_out(s, st) for s, st in rows]
+    return [_out(*r) for r in rows]
 
 
 @router.get("/stakeholders/{stakeholder_id}", response_model=StakeholderOut)

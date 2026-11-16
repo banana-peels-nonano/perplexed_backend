@@ -11,6 +11,10 @@ never carries content, so it can never become a second way for secrets to leave.
     {"type": "thread", "stakeholder_id": "cfo"}    a thread got a new message
     {"type": "evidence"}                           the team found new evidence
     {"type": "board", "version": 4}                someone saved the board
+    {"type": "team"}                               the team's company changed: refetch
+                                                   /status and /brief
+    {"type": "announcement"}                       organisers broadcast (or retracted)
+                                                   something: refetch /announcements
     {"type": "ping"}                               keep-alive, every 25 s; ignore it
 
 The registry lives in this process's memory (no Redis, D-009), so the app must run as a

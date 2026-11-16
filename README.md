@@ -93,6 +93,9 @@ Add `--fake` to the first two to run without API calls.
 | GET | `/api/v1/evidence` | every card the team has been shown, from any stakeholder |
 | GET | `/api/v1/board` | the team's evidence board |
 | PUT | `/api/v1/board` | save the board; send the `version` you edited (409 if someone saved first) |
+| GET | `/api/v1/brief` | the case brief and the team's company brief |
+| GET | `/api/v1/announcements` | organiser broadcasts for this team |
+| GET | `/api/v1/display` | no login: the projector page (phase, clock, public broadcasts) |
 | WS | `/api/v1/ws` | live "what changed" notifications for the team's open tabs |
 
 Errors are always `{"error": {"code", "message", "details"}}`. Another company's
@@ -106,8 +109,8 @@ links, and a small free-form `extra` object for the UI. The server never compute
 
 A case is one TOML file validated by `app/content/schema.py`: companies,
 stakeholders (persona, beliefs), records split into passages (topics, protected
-phrases, optional authored paraphrase), and per-stakeholder access by trust tier
-with unlock rules. The loader rejects inconsistent cases and names the problem.
+phrases, optional authored paraphrase), per-stakeholder access by trust tier with
+unlock rules, a shared brief and one brief per company, and the judges' clue list. The loader rejects inconsistent cases and names the problem.
 
 `tests/fixtures/northfield.toml` is a **placeholder** case for development and
 tests. The real case is never committed: keep it under `content/`, which is
@@ -130,8 +133,9 @@ tests/           pytest suite and fixtures
 
 ## Organisers
 
-Set `ADMIN_TOKEN` in `.env` to switch on the organiser API (phases, team view, fixes,
-live settings, content reload). See [ORGANISERS.md](ORGANISERS.md).
+Set `ADMIN_TOKEN` in `.env` to switch on the organiser API (team registration and
+company assignment, phases, time back, announcements, alerts, HR log, clues, team view,
+fixes, live settings, content reload). See [ORGANISERS.md](ORGANISERS.md).
 
 ## Frontend
 

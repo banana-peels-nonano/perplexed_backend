@@ -2,6 +2,7 @@
 
 from app.models.base import Base
 from app.models.content import (
+    Clue,
     Company,
     Department,
     Passage,
@@ -10,22 +11,29 @@ from app.models.content import (
     StakeholderPassageAccess,
 )
 from app.models.runtime import (
+    Announcement,
     Event,
+    HrFlag,
     LlmCall,
     Message,
     Phase,
     Team,
     TeamBoard,
+    TeamDepartmentState,
     TeamDisclosure,
     TeamSession,
     TeamStakeholderState,
+    TeamTimeBonus,
 )
 
 __all__ = [
+    "Announcement",
     "Base",
+    "Clue",
     "Company",
     "Department",
     "Event",
+    "HrFlag",
     "LlmCall",
     "Message",
     "Passage",
@@ -35,7 +43,9 @@ __all__ = [
     "StakeholderPassageAccess",
     "Team",
     "TeamBoard",
+    "TeamDepartmentState",
     "TeamDisclosure",
     "TeamSession",
     "TeamStakeholderState",
+    "TeamTimeBonus",
 ]

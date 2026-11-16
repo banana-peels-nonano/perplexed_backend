@@ -126,6 +126,11 @@ scripts/         dev tools
 tests/           pytest suite and fixtures
 ```
 
+## Organisers
+
+Set `ADMIN_TOKEN` in `.env` to switch on the organiser API (phases, team view, fixes,
+live settings, content reload). See [ORGANISERS.md](ORGANISERS.md).
+
 ## Frontend
 
 See [FRONTEND.md](FRONTEND.md): sessions, errors, interviews, evidence cards, the board,

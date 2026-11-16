@@ -28,7 +28,7 @@ from app.content.store import current_event
 from app.interview.render import render
 from app.models import Message, Phase, Stakeholder, Team, TeamBoard, TeamDisclosure
 from app.portal.board import BoardIn, stored
-from app.portal.clock import remaining_seconds
+from app.portal.clock import interviews_open, phase_remaining
 
 router = APIRouter(tags=["portal"])
 
@@ -37,7 +37,7 @@ class PhaseOut(BaseModel):
     key: str
     name: str
     status: str  # 'running' | 'paused'
-    remaining_seconds: int
+    remaining_seconds: int | None  # None: no timer in this phase
     interviews_open: bool
 
 
@@ -89,16 +89,8 @@ async def status(team: CurrentTeam, session: DbSession) -> StatusOut:
             key=phase.key,
             name=phase.display_name,
             status=phase.status,
-            remaining_seconds=remaining_seconds(
-                status=phase.status,
-                planned_seconds=phase.planned_seconds,
-                extended_seconds=phase.extended_seconds,
-                total_paused_seconds=phase.total_paused_seconds,
-                started_at=phase.started_at,
-                paused_at=phase.paused_at,
-                now=now,
-            ),
-            interviews_open=phase.status == "running" and bool(phase.capabilities.get("interview")),
+            remaining_seconds=phase_remaining(phase, now),
+            interviews_open=interviews_open(phase, now),
         )
     stakeholders: list[StakeholderOut] = []
     if team.company_id is not None:

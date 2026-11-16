@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     # keep False for local http://localhost, set COOKIE_SECURE=true behind Caddy/TLS.
     cookie_secure: bool = False
     session_ttl_hours: int = 24  # an overnight event fits in one session
+
+    # Organiser API (/api/v1/admin/*): requests must send "Authorization: Bearer <token>".
+    # Unset = the organiser API doesn't exist (404). At least 32 characters.
+    admin_token: SecretStr | None = None
+
+    @field_validator("admin_token")
+    @classmethod
+    def _long_enough(cls, v: SecretStr | None) -> SecretStr | None:
+        if v is not None and v.get_secret_value() and len(v.get_secret_value()) < 32:
+            raise ValueError("ADMIN_TOKEN must be at least 32 characters")
+        return v if (v is None or v.get_secret_value()) else None
 
 
 @lru_cache

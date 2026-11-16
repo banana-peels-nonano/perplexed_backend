@@ -151,6 +151,9 @@ class Message(Base):
     cited: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=sql_text("'{}'"))
     client_request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_at: Mapped[datetime] = _created_at()
+    # questions only: what the backend decided (label, trust change, evidence given, check
+    # results). Organisers only: never sent to participants.
+    meta: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class TeamDisclosure(Base):

@@ -82,7 +82,10 @@ Each card has `passage_id`, `record_id`, `record_title`, `excerpt`, `mode` and `
 - For now, **poll `GET /status`** about every 10 s. It returns the phase (`key`, `name`,
   `status`, `remaining_seconds`, `interviews_open`), questions left per stakeholder, the
   evidence count and `server_time`. Count down from `remaining_seconds`, correcting with
-  `server_time`; a paused phase keeps the same `remaining_seconds`.
+  `server_time`; a paused phase keeps the same `remaining_seconds`. `remaining_seconds`
+  is `null` for a phase with no timer, and `phase` is `null` between phases.
+- Use `interviews_open` to enable asking. It turns false when organisers pause, when the
+  phase changes, and when a timed phase runs out of time.
 - Refetch threads and evidence after your own actions, and when `evidence_count` changes.
 - **WebSockets are coming** as "something changed, refetch X" notifications. Keep each
   fetch as a function you can call from either a poll or a push.

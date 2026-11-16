@@ -18,6 +18,7 @@ import dataclasses
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import case as sql_case
 from sqlalchemy import delete, func, or_, select, update
@@ -42,6 +43,7 @@ from app.interview.trust import clamp, judge, rules
 from app.llm.base import LlmProvider, LlmResult, ProviderError
 from app.llm.pricing import cost_usd
 from app.models import LlmCall, Message, Phase, TeamDisclosure, TeamStakeholderState
+from app.portal.clock import interviews_open
 
 log = logging.getLogger(__name__)
 
@@ -204,7 +206,7 @@ async def ask_question(
         phase = await session.scalar(
             select(Phase).where(Phase.event_id == event.id, Phase.status == "running")
         )
-        if phase is None or not phase.capabilities.get("interview"):
+        if not interviews_open(phase, datetime.now(UTC)):  # incl. a timed phase out of time
             raise ApiError(409, "PHASE_CLOSED", "interviews are closed in the current phase")
 
         question_id = uuid.uuid4()
@@ -309,12 +311,23 @@ async def ask_question(
         vocab = set(case.company[stakeholder.company].topics)
         label = clf.data.get("label", "broad")
         topics = [t for t in clf.data.get("topics", []) if t in vocab]
-        verdict = judge(label, bool(clf.data.get("respectful", True)), strikes, config)
+        respectful = bool(clf.data.get("respectful", True))
+        verdict = judge(label, respectful, strikes, config)
+        meta: dict = {
+            "label": label,
+            "topics": topics,
+            "respectful": respectful,
+            "trust_before": trust,
+            "trust_delta": verdict.delta,
+            "strike": verdict.strike,
+            "warned": verdict.warn,
+            "walked_out": verdict.lockout,
+        }
         if verdict.lockout:
             # no answer call: the stakeholder ends the interview (question still charged)
             return await _walk_out(
                 maker, case, team, stakeholder_id, question_id, seq, verdict, results,
-                config, quota - used,
+                config, quota - used, meta,
             )  # fmt: skip
         # the stakeholder reacts to THIS question: answer at the trust it leaves them at
         trust = clamp(trust + verdict.delta)
@@ -341,6 +354,8 @@ async def ask_question(
         )
         evidence: list[tuple[str, Mode]] = [(pid, eligible[pid]) for pid in ranked]
         provided = dict(evidence)
+        meta |= {"tier": tier.name, "provided": {pid: m.name for pid, m in evidence}}
+        failed_checks: list[list[str]] = []
         prompt = build_answer_prompt(
             case,
             stakeholder_id,
@@ -376,9 +391,12 @@ async def ask_question(
             if check.ok:
                 status, reply, cards = "answered", draft, check.cards
                 if check.auto_cited:
+                    meta["auto_cited"] = check.auto_cited
                     log.info("auto-cited (used, not cited): %s", check.auto_cited)
                 break
+            failed_checks.append(check.details)
             log.warning("reply blocked (%s): %s", attempt, check.details)
+        meta |= {"failed_checks": failed_checks, "deflected": status == "blocked"}
     except ProviderError as exc:
         await _refund(maker, team, stakeholder_id, question_id, results, exc)
         raise ApiError(
@@ -402,7 +420,7 @@ async def ask_question(
         session.add(answer)
         await session.flush()
         await session.execute(
-            update(Message).where(Message.id == question_id).values(status="answered")
+            update(Message).where(Message.id == question_id).values(status="answered", meta=meta)
         )
         new_ids: set[str] = set()
         if cards:
@@ -464,7 +482,7 @@ async def ask_question(
 
 
 async def _walk_out(
-    maker, case, team, stakeholder_id, question_id, seq, verdict, results, config, remaining
+    maker, case, team, stakeholder_id, question_id, seq, verdict, results, config, remaining, meta
 ) -> AskResult:
     """The last strike: no answer, an HR notice in the thread, and a timed lockout."""
     _, hr = rules(config)
@@ -488,7 +506,7 @@ async def _walk_out(
         session.add(notice)
         await session.flush()
         await session.execute(
-            update(Message).where(Message.id == question_id).values(status="answered")
+            update(Message).where(Message.id == question_id).values(status="answered", meta=meta)
         )
         await session.execute(insert(LlmCall).values(_llm_rows(team, question_id, results)))
         await session.execute(

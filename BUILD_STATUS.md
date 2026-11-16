@@ -61,7 +61,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 |---|---|---|
 | Development environment | Done | Docker, Postgres 17, venv, test database |
 | FastAPI foundation | Done | settings, error envelope, health check |
-| Database schema and migrations | Done | migrations 0001–0004 |
+| Database schema and migrations | Done | migrations 0001–0005 |
 | Case format, loader, seed | Done | validated TOML; placeholder case only |
 | Authentication and teams | Done | access codes, sessions, team context |
 | Interview flow | Done | quota, idempotency, one question in flight, refund on failure, memory |
@@ -69,19 +69,19 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 | Disclosure and grounding checks | Done | leak, paraphrase, ungrounded-fact, citation checks; safe non-answers |
 | LLM provider layer | Done | Anthropic provider, fake provider for tests, cost accounting |
 | Hostile-question suite | Done | 27 probes, 0 leaks on the placeholder case |
-| Event engine (phases) | Partial | phase model and gating exist; organiser controls pending |
+| Event engine (phases) | Done | start/pause/resume/extend/end; timed phases close interviews on time |
 | Trust and HR mechanics | Done | per-question trust moves, warning, HR walk-out and timed lockout; numbers are placeholder defaults in event config until the seniors confirm |
 | Portal endpoints | Done | status (phase clock), evidence list, board save/load |
 | Evidence board | Partial | storage and checks done; UI design pending (frontend team) |
 | Live updates (WebSockets) | Pending | |
-| Admin and organiser endpoints | Pending | |
+| Admin and organiser endpoints | Done | token-protected: overview, team view with per-question decisions, fixes, quota, live config, content reload, costs (ORGANISERS.md) |
 | Real case conversion | Pending | case expected Monday |
 | Alliances | Pending | |
 | Submissions and judging | Pending | |
 | Frontend integration | Pending | frontend owned by another team member |
 | Staging and production deployment | Pending | |
 
-Tests: 135 passing (`python -m pytest -q`).
+Tests: 143 passing (`python -m pytest -q`).
 
 ## 6. Measured so far (placeholder case)
 
@@ -97,12 +97,11 @@ These must be re-measured on the real case.
 
 ## 7. Next
 
-1. Organiser controls: phases, content reload, live configuration, organiser view.
-2. Share the API (OpenAPI at `/docs`) with the frontend team (Monday noon).
-3. WebSocket notifications.
-4. Real case conversion, its own hostile-question suite and recall test.
-5. Alliances, submissions and judging.
-6. Deployment, backups, load test, rehearsal.
+1. Frontend integration once the frontend arrives (FRONTEND.md, OpenAPI at `/docs`).
+2. WebSocket notifications.
+3. Real case conversion, its own hostile-question suite and recall test.
+4. Alliances, submissions and judging.
+5. Deployment, backups, load test, rehearsal.
 
 ## 8. Event-rule questions to resolve
 

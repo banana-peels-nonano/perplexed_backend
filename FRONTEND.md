@@ -79,16 +79,32 @@ Each card has `passage_id`, `record_id`, `record_title`, `excerpt`, `mode` and `
 
 ## 6. Keeping laptops in sync
 
-- For now, **poll `GET /status`** about every 10 s. It returns the phase (`key`, `name`,
-  `status`, `remaining_seconds`, `interviews_open`), questions left per stakeholder, the
-  evidence count and `server_time`. Count down from `remaining_seconds`, correcting with
-  `server_time`; a paused phase keeps the same `remaining_seconds`. `remaining_seconds`
-  is `null` for a phase with no timer, and `phase` is `null` between phases.
+Open one WebSocket per tab: `new WebSocket("wss://<same host>/api/v1/ws")`. The session
+cookie is sent automatically (same origin). The socket only says **what changed**; you
+refetch it through the normal endpoints. It never carries content.
+
+| event | refetch |
+|---|---|
+| `{"type": "hello", "team": "A01"}` | nothing: connected |
+| `{"type": "phase"}` | `GET /status` (phase, clock, `interviews_open`) |
+| `{"type": "stakeholders"}` | `GET /status` or `GET /stakeholders` (questions left, availability) |
+| `{"type": "thread", "stakeholder_id": "cfo"}` | `GET /stakeholders/cfo/messages` |
+| `{"type": "evidence"}` | `GET /evidence` |
+| `{"type": "board", "version": 4}` | `GET /board` if your version is older |
+| `{"type": "content"}` | everything on screen (the case was reloaded) |
+| `{"type": "ping"}` | nothing (keep-alive every 25 s) |
+
+Close codes: `4401` not logged in or logged out → login screen; `4403` wrong origin;
+`4429` too many tabs for this team (limit 8). Any other close: reconnect after a few
+seconds with backoff, then refetch what's on screen (events missed while disconnected
+aren't replayed).
+
+- Count down from `remaining_seconds` in `GET /status`, correcting with `server_time`.
+  `remaining_seconds` is `null` for a phase with no timer; `phase` is `null` between phases.
 - Use `interviews_open` to enable asking. It turns false when organisers pause, when the
-  phase changes, and when a timed phase runs out of time.
-- Refetch threads and evidence after your own actions, and when `evidence_count` changes.
-- **WebSockets are coming** as "something changed, refetch X" notifications. Keep each
-  fetch as a function you can call from either a poll or a push.
+  phase changes, and when a timed phase runs out of time (no event is sent for that; your
+  countdown reaching zero is the signal).
+- An HR lockout ending also sends no event: count down `available_in_seconds`.
 
 ## 7. Evidence board
 

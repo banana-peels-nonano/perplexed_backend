@@ -9,11 +9,12 @@ from __future__ import annotations
 from fastapi import FastAPI
 from sqlalchemy import text
 
-from app.api import admin, auth, interview, portal, stakeholders
+from app.api import admin, auth, interview, live, portal, stakeholders
 from app.api.errors import install_error_handlers
 from app.auth.context import DbSession
 from app.config import get_settings
 from app.content.store import ContentStore
+from app.live.hub import Hub
 from app.llm.anthropic_provider import AnthropicProvider
 from app.llm.base import LlmProvider
 
@@ -30,12 +31,14 @@ def create_app(provider: LlmProvider | None = None) -> FastAPI:
     app = FastAPI(title="PERPLEXED 2.0 backend", version="0.2.0")
     app.state.provider = provider if provider is not None else default_provider()
     app.state.content = ContentStore()
+    app.state.hub = Hub()  # live notifications (app/live/hub.py)
     install_error_handlers(app)
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(stakeholders.router, prefix=API_PREFIX)
     app.include_router(interview.router, prefix=API_PREFIX)
     app.include_router(portal.router, prefix=API_PREFIX)
     app.include_router(admin.router, prefix=API_PREFIX)
+    app.include_router(live.router, prefix=API_PREFIX)
 
     @app.get("/healthz", tags=["ops"])
     async def healthz(session: DbSession) -> dict:

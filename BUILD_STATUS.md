@@ -73,7 +73,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 | Trust and HR mechanics | Done | per-question trust moves, warning, HR walk-out and timed lockout; numbers are placeholder defaults in event config until the seniors confirm |
 | Portal endpoints | Done | status (phase clock), evidence list, board save/load |
 | Evidence board | Partial | storage and checks done; UI design pending (frontend team) |
-| Live updates (WebSockets) | Pending | |
+| Live updates (WebSockets) | Done | notify-then-refetch; session-cookie auth, origin check, tab cap, logout closes that laptop's sockets |
 | Admin and organiser endpoints | Done | token-protected: overview, team view with per-question decisions, fixes, quota, live config, content reload, costs (ORGANISERS.md) |
 | Real case conversion | Pending | case expected Monday |
 | Alliances | Pending | |
@@ -81,7 +81,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-018).
 | Frontend integration | Pending | frontend owned by another team member |
 | Staging and production deployment | Pending | |
 
-Tests: 143 passing (`python -m pytest -q`).
+Tests: 149 passing (`python -m pytest -q`).
 
 ## 6. Measured so far (placeholder case)
 
@@ -98,10 +98,9 @@ These must be re-measured on the real case.
 ## 7. Next
 
 1. Frontend integration once the frontend arrives (FRONTEND.md, OpenAPI at `/docs`).
-2. WebSocket notifications.
-3. Real case conversion, its own hostile-question suite and recall test.
-4. Alliances, submissions and judging.
-5. Deployment, backups, load test, rehearsal.
+2. Real case conversion, its own hostile-question suite and recall test.
+3. Alliances, submissions and judging.
+4. Deployment, backups, load test, rehearsal.
 
 ## 8. Event-rule questions to resolve
 

@@ -55,6 +55,7 @@ sudo docker compose ps                    # wait for "healthy"
 alembic upgrade head
 python -m app.seed tests/fixtures/northfield.toml --teams-per-company 2 --start-phase solo
 uvicorn app.main:app --reload             # API docs at http://127.0.0.1:8000/docs
+# one process only (no --workers): live notifications are kept in this process's memory
 ```
 
 The seed prints each team's access code once; only hashes are stored. Re-seeding
@@ -92,6 +93,7 @@ Add `--fake` to the first two to run without API calls.
 | GET | `/api/v1/evidence` | every card the team has been shown, from any stakeholder |
 | GET | `/api/v1/board` | the team's evidence board |
 | PUT | `/api/v1/board` | save the board; send the `version` you edited (409 if someone saved first) |
+| WS | `/api/v1/ws` | live "what changed" notifications for the team's open tabs |
 
 Errors are always `{"error": {"code", "message", "details"}}`. Another company's
 stakeholder is a 404.

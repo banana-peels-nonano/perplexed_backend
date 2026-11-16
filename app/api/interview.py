@@ -81,6 +81,7 @@ async def ask(
     maker: Maker,
     case: CaseDep,
     provider: ProviderDep,
+    request: Request,
 ) -> AskOut:
     result = await ask_question(
         maker=maker,
@@ -91,6 +92,11 @@ async def ask(
         client_request_id=body.client_request_id,
         text=body.text,
     )
+    # the team's other laptop refetches; this one already has the answer
+    events = [{"type": "thread", "stakeholder_id": stakeholder_id}, {"type": "stakeholders"}]
+    if any(c.new for c in result.evidence):
+        events.append({"type": "evidence"})
+    await request.app.state.hub.publish(team.team_id, *events)
     return AskOut(
         question_id=result.question_id,
         answer_id=result.answer_id,

@@ -37,6 +37,15 @@ async def get_team_context(request: Request, session: DbSession) -> TeamContext:
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise ApiError(401, "UNAUTHENTICATED", "log in first")
+    team = await team_from_token(session, token)
+    if team is None:
+        raise ApiError(401, "UNAUTHENTICATED", "session expired or logged out; log in again")
+    return team
+
+
+async def team_from_token(session: AsyncSession, token: str) -> TeamContext | None:
+    """The team behind a session token, or None (unknown, revoked or expired). Shared by
+    HTTP requests and the WebSocket handshake."""
     cutoff = datetime.now(UTC) - timedelta(hours=get_settings().session_ttl_hours)
     row = (
         await session.execute(
@@ -50,7 +59,7 @@ async def get_team_context(request: Request, session: DbSession) -> TeamContext:
         )
     ).one_or_none()
     if row is None:
-        raise ApiError(401, "UNAUTHENTICATED", "session expired or logged out; log in again")
+        return None
     session_id, team_id, team_code, company_id = row
     return TeamContext(team_id, team_code, company_id, session_id)
 

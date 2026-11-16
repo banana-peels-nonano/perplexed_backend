@@ -122,7 +122,7 @@ async def phases(session: DbSession) -> list[PhaseAdminOut]:
 
 
 @router.post("/phases/{key}/start", response_model=PhaseAdminOut)
-async def start(key: str, session: DbSession) -> PhaseAdminOut:
+async def start(key: str, session: DbSession, request: Request) -> PhaseAdminOut:
     all_phases = await _phases(session)
     target = next((p for p in all_phases if p.key == key), None)
     if target is None:
@@ -138,21 +138,23 @@ async def start(key: str, session: DbSession) -> PhaseAdminOut:
     target.paused_at = None
     target.total_paused_seconds = 0
     await session.commit()
+    await request.app.state.hub.broadcast({"type": "phase"})
     return _phase_out(target, datetime.now(UTC))
 
 
 @router.post("/phases/current/pause", response_model=PhaseAdminOut)
-async def pause(session: DbSession) -> PhaseAdminOut:
+async def pause(session: DbSession, request: Request) -> PhaseAdminOut:
     p = await _active(session)
     if p.status == "paused":
         raise ApiError(409, "PHASE_PAUSED", "already paused")
     p.status, p.paused_at = "paused", datetime.now(UTC)
     await session.commit()
+    await request.app.state.hub.broadcast({"type": "phase"})
     return _phase_out(p, datetime.now(UTC))
 
 
 @router.post("/phases/current/resume", response_model=PhaseAdminOut)
-async def resume(session: DbSession) -> PhaseAdminOut:
+async def resume(session: DbSession, request: Request) -> PhaseAdminOut:
     p = await _active(session)
     if p.status != "paused":
         raise ApiError(409, "PHASE_RUNNING", "not paused")
@@ -160,6 +162,7 @@ async def resume(session: DbSession) -> PhaseAdminOut:
     p.total_paused_seconds += int((now - p.paused_at).total_seconds())
     p.status, p.paused_at = "running", None
     await session.commit()
+    await request.app.state.hub.broadcast({"type": "phase"})
     return _phase_out(p, now)
 
 
@@ -168,20 +171,22 @@ class ExtendIn(BaseModel):
 
 
 @router.post("/phases/current/extend", response_model=PhaseAdminOut)
-async def extend(body: ExtendIn, session: DbSession) -> PhaseAdminOut:
+async def extend(body: ExtendIn, session: DbSession, request: Request) -> PhaseAdminOut:
     p = await _active(session)
     if p.planned_seconds == 0:
         raise ApiError(409, "PHASE_UNTIMED", "this phase has no timer to extend")
     p.extended_seconds = max(-p.planned_seconds, p.extended_seconds + body.seconds)
     await session.commit()
+    await request.app.state.hub.broadcast({"type": "phase"})
     return _phase_out(p, datetime.now(UTC))
 
 
 @router.post("/phases/current/end", response_model=PhaseAdminOut)
-async def end(session: DbSession) -> PhaseAdminOut:
+async def end(session: DbSession, request: Request) -> PhaseAdminOut:
     p = await _active(session)
     p.status, p.paused_at = "ended", None
     await session.commit()
+    await request.app.state.hub.broadcast({"type": "phase"})
     return _phase_out(p, datetime.now(UTC))
 
 
@@ -341,7 +346,7 @@ class StatePatch(BaseModel):
 
 @router.patch("/teams/{code}/stakeholders/{stakeholder_id}", response_model=StakeholderStateOut)
 async def patch_state(
-    code: str, stakeholder_id: str, body: StatePatch, session: DbSession
+    code: str, stakeholder_id: str, body: StatePatch, session: DbSession, request: Request
 ) -> StakeholderStateOut:
     team = await _team(session, code)
     state = await session.get(TSS, (team.id, stakeholder_id))
@@ -354,6 +359,7 @@ async def patch_state(
     if body.clear_lockout:
         state.locked_until, state.strikes = None, 0
     await session.commit()
+    await request.app.state.hub.publish(team.id, {"type": "stakeholders"})
     config = (await current_event(session)).config
     return StakeholderStateOut(
         stakeholder_id=stakeholder_id,
@@ -372,12 +378,13 @@ class QuotaIn(BaseModel):
 
 
 @router.post("/quota")
-async def set_quota(body: QuotaIn, session: DbSession) -> dict[str, int]:
+async def set_quota(body: QuotaIn, session: DbSession, request: Request) -> dict[str, int]:
     stmt = update(TSS).values(quota=func.greatest(body.quota, TSS.questions_used))
     if body.stakeholder_id:
         stmt = stmt.where(TSS.stakeholder_id == body.stakeholder_id)
     result = await session.execute(stmt)
     await session.commit()
+    await request.app.state.hub.broadcast({"type": "stakeholders"})
     return {"rows_updated": result.rowcount}
 
 
@@ -477,6 +484,7 @@ async def reload_content(body: ReloadIn, request: Request, session: DbSession) -
         await ensure_team_state(session, team, event.config)  # new stakeholders get rows
     await session.commit()
     request.app.state.content.invalidate()  # next request loads the new content
+    await request.app.state.hub.broadcast({"type": "content"})
     return {
         "case_id": case.case_id,
         "stakeholders": len(case.stakeholder),
@@ -522,6 +530,12 @@ async def costs(session: DbSession) -> dict[str, Any]:
         ],
         "recent_errors": [{"at": at, "error": e} for at, e in errors],
     }
+
+
+@router.get("/live")
+async def live_connections(request: Request) -> dict[str, int]:
+    """How many tabs are connected for live updates (single-process registry)."""
+    return {"connections": request.app.state.hub.count()}
 
 
 @router.get("/overview")

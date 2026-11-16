@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -162,7 +162,9 @@ async def get_board(team: CurrentTeam, session: DbSession) -> BoardOut:
 
 
 @router.put("/board", response_model=BoardOut)
-async def put_board(body: BoardIn, team: CurrentTeam, session: DbSession) -> BoardOut:
+async def put_board(
+    body: BoardIn, team: CurrentTeam, session: DbSession, request: Request
+) -> BoardOut:
     _require_company(team)
     # evidence cards: only passages this team has actually been shown
     shown = set(
@@ -227,4 +229,6 @@ async def put_board(body: BoardIn, team: CurrentTeam, session: DbSession) -> Boa
                        "reload it and apply your change again",
                        {"current_version": current.version if current else 0})  # fmt: skip
     await session.commit()
-    return _board_out(await session.get(TeamBoard, team.team_id, populate_existing=True))
+    out = _board_out(await session.get(TeamBoard, team.team_id, populate_existing=True))
+    await request.app.state.hub.publish(team.team_id, {"type": "board", "version": out.version})
+    return out

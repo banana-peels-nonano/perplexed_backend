@@ -33,6 +33,7 @@ curl -s -H "$AUTH" $PX/overview        # phase, questions asked, deflections, lo
 curl -s -H "$AUTH" $PX/teams           # per team: trust, tier, strikes, lockouts, quota, cost
 curl -s -H "$AUTH" $PX/teams/A01/threads/cfo   # a thread, with what the backend decided per question
 curl -s -H "$AUTH" $PX/costs           # spend by model and purpose, last 10 provider errors
+curl -s -H "$AUTH" $PX/live            # how many tabs are connected for live updates
 ```
 
 Each question in a thread carries `meta`: the classifier's label and topics, the trust

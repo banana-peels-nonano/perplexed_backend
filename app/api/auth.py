@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 
 from app.auth.context import CurrentTeam, DbSession
@@ -44,8 +44,9 @@ async def login(body: LoginRequest, response: Response, session: DbSession) -> T
 
 
 @router.post("/auth/logout", status_code=204)
-async def logout(team: CurrentTeam, session: DbSession) -> Response:
+async def logout(team: CurrentTeam, session: DbSession, request: Request) -> Response:
     await do_logout(session, team.session_id)
+    await request.app.state.hub.close_session(team.session_id)  # this laptop's live tabs
     response = Response(status_code=204)
     response.delete_cookie(COOKIE_NAME, path="/")
     return response

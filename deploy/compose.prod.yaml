@@ -1,0 +1,89 @@
+# PERPLEXED 2.0 on one server: app + Postgres + backups (+ Caddy for HTTPS).
+#
+#   cd deploy && ./setup.sh               first time (writes deploy/.env, builds, starts)
+#   docker compose -f compose.prod.yaml --profile caddy up -d --build   after a git pull
+#   docker compose -f compose.prod.yaml logs -f app
+#
+# Two ways to put it on the internet:
+#   --profile caddy   our Caddy takes ports 80/443 and gets the HTTPS certificate itself
+#   (no profile)      the app listens on 127.0.0.1:8000 only; an existing nginx on the
+#                     server proxies to it (deploy/nginx-perplexed.conf)
+
+name: perplexed
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: perplexed
+      POSTGRES_DB: perplexed
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U perplexed -d perplexed"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # no ports: only the app (on this private network) can reach the database
+
+  app:
+    build: ..
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://perplexed:${POSTGRES_PASSWORD}@db:5432/perplexed
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in deploy/.env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      SEED_CASE: ${SEED_CASE:-}
+    volumes:
+      - ../content:/app/content:ro  # the real case lives here on the server, never in git
+    ports:
+      - "127.0.0.1:8000:8000"  # loopback only; the proxy is the public door
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      EVERY_SECONDS: ${BACKUP_EVERY_SECONDS:-300}
+      KEEP: ${BACKUP_KEEP:-288}  # 288 x 5 min = the last 24 hours
+    volumes:
+      - ./backups:/backups
+      - ./backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "/backup.sh"]
+
+  caddy:
+    image: caddy:2
+    profiles: ["caddy"]
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

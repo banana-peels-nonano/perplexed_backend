@@ -38,3 +38,4 @@ reports/
 
 # Real case content: never in this public repository
 content/
+deploy/backups/

@@ -131,6 +131,21 @@ scripts/         dev tools
 tests/           pytest suite and fixtures
 ```
 
+## Frontend (in this repo)
+
+`web/` is the whole frontend: plain ES modules with Preact + htm vendored in
+`web/vendor/` (no npm, no build step), fonts self-hosted in `web/fonts/` (OFL). The backend
+serves it, so the browser sees one origin and the session cookie just works.
+
+| URL | |
+|---|---|
+| `/` | team portal: login, brief, people (badges), interviews, evidence, board, documents, rounds |
+| `/console` | organiser console (asks for `ADMIN_TOKEN`; kept in that tab only) |
+| `/display` | projector page: round, clock, public announcements (no login) |
+
+Edit a file in `web/`, refresh the browser. Pages are sent with a strict
+Content-Security-Policy (scripts only from this server, no inline scripts).
+
 ## Organisers
 
 Set `ADMIN_TOKEN` in `.env` to switch on the organiser API (team registration and
@@ -141,6 +156,10 @@ fixes, live settings, content reload). See [ORGANISERS.md](ORGANISERS.md).
 
 See [FRONTEND.md](FRONTEND.md): sessions, errors, interviews, evidence cards, the board,
 and what the UI must never show.
+
+## Deploying
+
+See [DEPLOY.md](DEPLOY.md): one server, `cd deploy && ./setup.sh`.
 
 ## Status
 

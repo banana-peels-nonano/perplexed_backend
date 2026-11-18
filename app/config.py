@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     # Unset = the organiser API doesn't exist (404). At least 32 characters.
     admin_token: SecretStr | None = None
 
+    @field_validator("database_url", "test_database_url")
+    @classmethod
+    def _async_driver(cls, v: str | None) -> str | None:
+        """Hosts (Render, Heroku) hand out postgres:// URLs; SQLAlchemy needs the driver."""
+        if v and v.startswith(("postgres://", "postgresql://")):
+            return "postgresql+asyncpg://" + v.split("://", 1)[1]
+        return v
+
     @field_validator("admin_token")
     @classmethod
     def _long_enough(cls, v: SecretStr | None) -> SecretStr | None:

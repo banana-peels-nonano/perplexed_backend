@@ -1,0 +1,13 @@
+# Caddy gets and renews the HTTPS certificate for $DOMAIN by itself (the domain's A record
+# must point at this server, ports 80 and 443 open). WebSockets pass through untouched.
+{$DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 25MB # organisers upload documents up to 15 MB (base64 adds a third)
+	}
+	reverse_proxy app:8000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

@@ -11,6 +11,7 @@ Organisers (bearer ADMIN_TOKEN):
   POST   /admin/documents                    a markdown note or a file (base64), for
                                              everyone, one company, or named teams
   GET    /admin/documents, PATCH/DELETE /admin/documents/{id}
+  GET    /admin/companies                    ids and names, for the console's pickers
   GET    /admin/phases/{key}/statuses        every team's status for that round
   PUT    /admin/phases/{key}/statuses        set statuses (drafts unless "publish": true)
   POST   /admin/phases/{key}/statuses/publish   release every draft for that round at once
@@ -190,6 +191,12 @@ async def delete_round(key: str, session: DbSession, request: Request):
     await session.commit()
     await request.app.state.hub.broadcast({"type": "phase"})
     return {"deleted": key}
+
+
+@admin.get("/companies")
+async def companies(session: DbSession) -> list[dict]:
+    rows = await session.execute(select(Company.id, Company.name).order_by(Company.id))
+    return [{"id": cid, "name": name} for cid, name in rows.all()]
 
 
 # ------------------------------------------------------------------ documents

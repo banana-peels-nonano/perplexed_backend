@@ -213,3 +213,20 @@ async def test_a_retried_question_with_cards_replays(seeded, make_client, fake, 
     assert again.json()["questions_remaining"] == 9  # charged once
     async with make_sessionmaker(db)() as s:
         assert await s.scalar(select(Message.id).where(Message.role == "notice")) is None
+
+
+async def test_hr_can_count_strikes_per_stakeholder(seeded, make_client, fake, db):
+    # the case design doc's rule: three strikes with ONE person, then the department locks
+    await _sql(
+        db, """UPDATE event SET config = jsonb_set(config, '{hr,strike_scope}', '"stakeholder"')"""
+    )
+    fake.queues["classify"] += [HOSTILE, HOSTILE, HOSTILE]
+    fake.queues["answer"] += [REPLY, REPLY, REPLY]
+    client = await _team(make_client, seeded)
+    for who in ("ops_head", "qa_lead", "ops_head"):  # 2 + 1: nobody has reached 3
+        assert (await _ask(client, "Useless.", who=who)).json()["kind"] == "answer"
+    fake.queues["classify"].append(HOSTILE)
+    r = await _ask(client, "Pathetic.", who="ops_head")  # ops_head's third
+    assert r.json()["kind"] == "hr_notice"
+    refused = await _ask(client, "Hello?", who="qa_lead")
+    assert refused.json()["error"]["code"] == "HR_LOCKOUT"  # the lock is still departmental

@@ -1,5 +1,8 @@
 # Notes for the frontend
 
+The frontend now lives in this repo under `web/` and is served by the backend (see
+README). This file stays as the API contract it is built on.
+
 What you need to know before building against this backend. The full, always-current
 API reference is the OpenAPI page at `/docs` on a running server (`uvicorn app.main:app`,
 then <http://127.0.0.1:8000/docs>). Every path below is under `/api/v1`.
@@ -86,6 +89,15 @@ Each card has `passage_id`, `record_id`, `record_title`, `excerpt`, `mode` and `
   `{"title", "body"}` for a note (markdown) or the file itself (link to it directly).
 - Error `NOT_IN_ROUND` (409): the team was eliminated from the current round.
 
+- **Alliance:** `GET /alliance` (`can_request`, `locked`, `incoming`, `outgoing`),
+  `GET /alliance/teams`, `POST /alliance/requests {"team"}`,
+  `POST /alliance/requests/{id}/accept`, `DELETE /alliance/requests/{id}`,
+  `GET /alliance/evidence` (partners' cards, with `team_code`; only once locked).
+- **Findings sheet:** `GET /submission`, `PUT /submission {"base_version", "summary",
+  "findings": [{id, title, finding, impact, recommendation, sources, cross_company}],
+  "final"}`. 409 `SUBMISSION_CONFLICT` = a teammate saved first; 409 `SUBMISSIONS_CLOSED`;
+  422 `SHEET_INCOMPLETE` (`details.problems`) or `UNKNOWN_EVIDENCE`.
+
 ## 6. What the UI must never do
 
 - **Never show trust**, or anything that suggests it: no meter, no mood indicator. Trust is
@@ -116,6 +128,8 @@ refetch it through the normal endpoints. It never carries content.
 | `{"type": "announcement"}` | `GET /announcements` (new or retracted broadcast) |
 | `{"type": "documents"}` | `GET /documents` (released, withdrawn, or a round started) |
 | `{"type": "rounds"}` | `GET /rounds` (a result for this team was published) |
+| `{"type": "alliance"}` | `GET /alliance` and `GET /alliance/evidence` |
+| `{"type": "submission"}` | `GET /submission` (a teammate saved) |
 | `{"type": "ping"}` | nothing (keep-alive every 25 s) |
 
 Close codes: `4401` not logged in or logged out → login screen; `4403` wrong origin;

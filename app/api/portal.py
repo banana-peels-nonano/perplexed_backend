@@ -39,6 +39,7 @@ from app.models import (
     TeamBoard,
     TeamDisclosure,
 )
+from app.portal.alliance import usable_passages
 from app.portal.board import BoardIn, stored
 from app.portal.clock import interviews_open, not_in_round, phase_remaining, team_bonus
 
@@ -124,16 +125,8 @@ async def status(team: CurrentTeam, session: DbSession) -> StatusOut:
     )
 
 
-@router.get("/evidence", response_model=list[EvidenceItemOut])
-async def evidence(team: CurrentTeam, session: DbSession, case: CaseDep) -> list[EvidenceItemOut]:
-    _require_company(team)
-    rows = (
-        await session.scalars(
-            select(TeamDisclosure)
-            .where(TeamDisclosure.team_id == team.team_id)
-            .order_by(TeamDisclosure.disclosed_at, TeamDisclosure.passage_id)
-        )
-    ).all()
+def evidence_items(case, rows) -> list[EvidenceItemOut]:
+    """Cards for disclosure rows, rendered at the mode each was disclosed in."""
     out = []
     for d in rows:
         if d.passage_id not in case.passage:  # content reloaded without it: skip, don't fail
@@ -155,6 +148,19 @@ async def evidence(team: CurrentTeam, session: DbSession, case: CaseDep) -> list
             )
         )
     return out
+
+
+@router.get("/evidence", response_model=list[EvidenceItemOut])
+async def evidence(team: CurrentTeam, session: DbSession, case: CaseDep) -> list[EvidenceItemOut]:
+    _require_company(team)
+    rows = (
+        await session.scalars(
+            select(TeamDisclosure)
+            .where(TeamDisclosure.team_id == team.team_id)
+            .order_by(TeamDisclosure.disclosed_at, TeamDisclosure.passage_id)
+        )
+    ).all()
+    return evidence_items(case, rows)
 
 
 def _board_out(row: TeamBoard | None) -> BoardOut:
@@ -180,12 +186,8 @@ async def put_board(
     body: BoardIn, team: CurrentTeam, session: DbSession, request: Request
 ) -> BoardOut:
     _require_company(team)
-    # evidence cards: only passages this team has actually been shown
-    shown = set(
-        await session.scalars(
-            select(TeamDisclosure.passage_id).where(TeamDisclosure.team_id == team.team_id)
-        )
-    )
+    # evidence cards: only passages this team (or a locked alliance partner) has been shown
+    shown = await usable_passages(session, team.team_id)
     unknown = sorted({c.passage_id for c in body.cards if c.kind == "evidence"} - shown)
     if unknown:
         raise ApiError(422, "UNKNOWN_EVIDENCE", "the board refers to evidence your team "

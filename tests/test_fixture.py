@@ -131,3 +131,16 @@ def test_loader_rejects_paraphrase_traps():
     data["stakeholder"]["qa_lead"]["persona"] += " Remembers the June shipment target."
     with pytest.raises(ValueError, match="persona/beliefs contain A-COM-001#2"):
         Case.model_validate(data)
+
+
+def test_a_case_can_carry_its_own_event_config():
+    import pytest
+
+    from app.content.schema import Case
+
+    data = load_case(FIXTURE).model_dump()
+    data["config"] = {"default_quota": 8, "hr": {"strike_scope": "stakeholder"}}
+    assert Case.model_validate(data).config["default_quota"] == 8
+    data["config"] = {"admin_token": "x"}
+    with pytest.raises(ValueError, match="config: unknown keys"):
+        Case.model_validate(data)

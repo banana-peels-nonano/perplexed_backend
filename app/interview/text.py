@@ -23,6 +23,9 @@ def normalise(text: str) -> str:
     are made the same, so the fingerprint and the reply meet in one form.
     """
     t = text.casefold().replace("\u2019", "'").replace("\u2018", "'")
+    t = re.sub(r"[\u2010-\u2015\u2212]", "-", t)  # en/em dashes, minus: 12–16 -> 12-16
+    t = re.sub(r"(?:₹|\brs\.?|\binr)\s*(?=\d)", "", t)  # ₹8, Rs. 8, INR 8 -> 8
+    t = re.sub(r"(?<=\d)(?=[a-z])", " ", t)  # 50hz -> 50 hz, 10l -> 10 l, 22% handled below
     t = re.sub(r"(?<=\d),(?=\d{3}\b)", "", t)  # 3,050 -> 3050
     t = re.sub(r"(\w)-(\w)", r"\1 \2", t)  # twenty-five, 1-in-20
     t = re.sub(

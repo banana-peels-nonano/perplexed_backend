@@ -90,6 +90,32 @@ Statuses: `advancing`, `eliminated`, `waitlisted`, `pending`. Add `"publish": tr
 PUT to publish straight away. A published `eliminated` closes interviews for that team in
 that round.
 
+## Alliances
+
+Teams ask and accept in the portal while a round with `alliances` switched on is running
+(Console → Rounds: tick "Alliances"). Once every member confirms, the alliance is locked
+for good and partners see each other's evidence.
+
+```bash
+curl -s -H "$AUTH" $PX/alliances                                  # pending and locked
+curl -s -H "$AUTH" -X POST $PX/alliances -H 'Content-Type: application/json' -d '{"teams": ["T001", "T014"]}'
+curl -s -H "$AUTH" -X POST $PX/alliances -H 'Content-Type: application/json' -d '{"teams": ["T003", "T017", "T021"]}'   # the three-team one
+curl -s -H "$AUTH" -X DELETE $PX/alliances/<id>                   # dissolve (even a locked one)
+```
+
+## Submissions (Audit Findings Sheet)
+
+Teams save and submit while a round with `submissions` switched on is running and their
+clock has time left (time given back counts). Every save is kept. Judges read the last
+submitted version; a team that never pressed Submit is shown with its last draft, flagged.
+An allied team must have one finding marked cross-company that cites partner evidence.
+
+```bash
+curl -s -H "$AUTH" "$PX/submissions?round=joint"            # who has submitted, when
+curl -s -H "$AUTH" "$PX/submissions/T001?round=joint"       # the sheet judges read
+curl -s -H "$AUTH" "$PX/submissions/T001?round=joint&version=3"
+```
+
 ## Phases
 
 ```bash
@@ -178,6 +204,20 @@ Changeable live: `tier_thresholds`, `trust_rules`, `hr`, `evidence_token_budget`
 afterwards. Anything else is refused.
 
 ## Content
+
+**Switching to a different case** (before the event only): cases share the content tables,
+so loading a second case on top of the first mixes their people and records. Empty the
+database and load the new one:
+
+```bash
+python -m app.seed content/case.toml --fresh --event-name "PERPLEXED 2.0"
+# on the server: docker compose -f compose.prod.yaml exec app python -m app.seed content/case.toml --fresh --event-name "PERPLEXED 2.0"
+```
+
+`--fresh` deletes everything: teams, threads, evidence, submissions. A case file can carry
+its own `[config]` (trust rules, tiers, HR, quota); it applies when the case is loaded fresh.
+
+**A newer version of the same case** (fixing a typo, adding a record):
 
 ```bash
 curl -s -H "$AUTH" -X POST $PX/content/reload -H 'Content-Type: application/json' \

@@ -6,10 +6,24 @@ Then open:     http://127.0.0.1:8000/docs   (interactive API page, generated fro
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.api import admin, auth, interview, live, portal, rounds, stakeholders
+from app.api import (
+    admin,
+    alliances,
+    auth,
+    interview,
+    live,
+    portal,
+    rounds,
+    stakeholders,
+    submissions,
+)
 from app.api.errors import install_error_handlers
 from app.auth.context import DbSession
 from app.config import get_settings
@@ -40,6 +54,10 @@ def create_app(provider: LlmProvider | None = None) -> FastAPI:
     app.include_router(admin.router, prefix=API_PREFIX)
     app.include_router(rounds.admin, prefix=API_PREFIX)
     app.include_router(rounds.teams, prefix=API_PREFIX)
+    app.include_router(alliances.teams, prefix=API_PREFIX)
+    app.include_router(alliances.admin, prefix=API_PREFIX)
+    app.include_router(submissions.teams, prefix=API_PREFIX)
+    app.include_router(submissions.admin, prefix=API_PREFIX)
     app.include_router(live.router, prefix=API_PREFIX)
 
     @app.get("/healthz", tags=["ops"])
@@ -47,7 +65,50 @@ def create_app(provider: LlmProvider | None = None) -> FastAPI:
         await session.execute(text("SELECT 1"))  # proves the database is reachable too
         return {"status": "ok"}
 
+    mount_web(app)
     return app
+
+
+WEB = Path(__file__).resolve().parents[1] / "web"
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "X-Frame-Options": "DENY",
+    # scripts and styles only from this server; nothing inline, nothing third-party
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; "
+        "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    ),
+}
+
+
+def mount_web(app: FastAPI) -> None:
+    """The frontend is static files served by this same app: one origin, so the session
+    cookie (SameSite=Strict, HttpOnly) just works and there's one thing to deploy.
+    /         the team portal          /console  the organiser console
+    /display  the projector page       everything else under / is a static file"""
+    if not WEB.is_dir():
+        return
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        if not request.url.path.startswith(("/api/", "/docs", "/redoc", "/openapi.json")):
+            response.headers.update(SECURITY_HEADERS)
+            # no stale JS after a deploy mid-event; files are small
+            response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
+    @app.get("/console", include_in_schema=False)
+    async def console() -> FileResponse:
+        return FileResponse(WEB / "console.html")
+
+    @app.get("/display", include_in_schema=False)
+    async def display() -> FileResponse:
+        return FileResponse(WEB / "display.html")
+
+    app.mount("/", StaticFiles(directory=WEB, html=True), name="web")
 
 
 app = create_app()

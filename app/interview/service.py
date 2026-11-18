@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy import literal as _literal
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -56,6 +57,7 @@ log = logging.getLogger(__name__)
 
 TSS = TeamStakeholderState
 TDS = TeamDepartmentState
+NEVER = _literal("-infinity").cast(TDS.reset_at.type)  # "no reset yet": every flag counts
 # Used when both drafts fail the checks. Several plain non-answers, not one stock line:
 # step 8 showed deflections happen almost only where something is hidden, so one fixed
 # sentence would tell teams "you just hit a secret". These read like an ordinary "don't
@@ -251,9 +253,23 @@ async def ask_question(
             )
         if left is not None:  # a lockout that has run out is over: strikes start from zero
             await session.execute(
-                update(TDS).where(*dept_where).values(strikes=0, locked_until=None)
+                update(TDS)
+                .where(*dept_where)
+                .values(strikes=0, locked_until=None, reset_at=func.now())
             )
             strikes = 0
+        if rules(config)[1].get("strike_scope") == "stakeholder":
+            # count this person's strikes since the department last started from zero
+            reset_at = select(TDS.reset_at).where(*dept_where).scalar_subquery()
+            strikes = await session.scalar(
+                select(func.count())
+                .select_from(HrFlag)
+                .where(
+                    HrFlag.team_id == team.team_id,
+                    HrFlag.stakeholder_id == stakeholder_id,
+                    HrFlag.created_at > func.coalesce(reset_at, NEVER),
+                )
+            )
 
         question_id = uuid.uuid4()
         # One atomic statement: succeeds only if quota is left AND nothing is in flight.

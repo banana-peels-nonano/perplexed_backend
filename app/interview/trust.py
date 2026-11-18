@@ -47,6 +47,10 @@ DEFAULT_HR: dict[str, Any] = {
     "strike_labels": ["hostile", "prompt_attack"],
     "strikes_to_lockout": 3,
     "lockout_seconds": 600,
+    # "department": strikes against anyone in a department add up (the build checklist);
+    # "stakeholder": strikes count per person, the lockout still covers the department
+    # (the case design doc: "3 strikes with one stakeholder -> that department locked")
+    "strike_scope": "department",
 }
 
 

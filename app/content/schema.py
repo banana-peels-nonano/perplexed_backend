@@ -9,7 +9,7 @@ not halfway through an interview.
 from __future__ import annotations
 
 from enum import IntEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -140,6 +140,12 @@ class SmokeConversation(_Strict):
     questions: list[str]
 
 
+CASE_CONFIG_KEYS = {
+    "tier_thresholds", "trust_rules", "hr", "default_quota", "trust_start",
+    "evidence_token_budget", "max_passages", "submissions",
+}  # fmt: skip
+
+
 class Case(_Strict):
     schema_version: Literal[1]
     case_id: str
@@ -152,6 +158,9 @@ class Case(_Strict):
     passage: dict[str, Passage]
     access: list[Access]
     clue: dict[str, str] = {}
+    # event settings this case was designed for (trust rules, tiers, HR, quota); applied
+    # when the case's event is first created. Organisers can still change them live.
+    config: dict[str, Any] = {}
     contradiction: list[Contradiction] = []
     scenario: list[Scenario] = []
     citation_case: list[CitationCase] = []
@@ -204,6 +213,9 @@ class Case(_Strict):
                 errors.append(f"access {key}: unknown labels {a.labels}")
             if a.phase_from and a.phase_from not in self.phases:
                 errors.append(f"access {key}: unknown phase {a.phase_from}")
+        unknown_config = set(self.config) - CASE_CONFIG_KEYS
+        if unknown_config:
+            errors.append(f"config: unknown keys {sorted(unknown_config)}")
         errors += self._paraphrase_and_persona_errors()
         if errors:
             raise ValueError("invalid case:\n  " + "\n  ".join(errors))

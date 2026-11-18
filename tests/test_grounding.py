@@ -98,3 +98,12 @@ def test_the_question_grounds_its_own_numbers_unless_they_are_hidden_facts(
     question, reply, flagged
 ):
     assert ungrounded_facts(CASE, "cfo", {}, "", reply, question) == flagged
+
+
+def test_units_currency_and_dashes_are_normalised():
+    from app.interview.text import mentions
+
+    assert mentions("the sensor now runs at 50Hz", "50 Hz")
+    assert mentions("a bonus of Rs. 8 per activated code", "₹8 per activated")
+    assert mentions("on leave 12–16 June", "12-16 June")
+    assert not mentions("version 2.3 shipped", "3")

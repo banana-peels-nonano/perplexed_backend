@@ -39,7 +39,7 @@ import random
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -461,7 +461,9 @@ async def patch_state(
         TDS.department == stakeholder.department,
     )
     if body.clear_lockout:  # clears the whole department: that is what the lockout covers
-        await session.execute(update(TDS).where(*dept_where).values(strikes=0, locked_until=None))
+        await session.execute(
+            update(TDS).where(*dept_where).values(strikes=0, locked_until=None, reset_at=func.now())
+        )
     await session.commit()
     await request.app.state.hub.publish(team.id, {"type": "stakeholders"})
     config = (await current_event(session)).config
@@ -861,6 +863,7 @@ class HrRules(BaseModel):
     strike_labels: list[str] | None = None
     strikes_to_lockout: int | None = Field(default=None, ge=1, le=20)
     lockout_seconds: int | None = Field(default=None, ge=0, le=3600)
+    strike_scope: Literal["department", "stakeholder"] | None = None
 
 
 class TrustRules(BaseModel):

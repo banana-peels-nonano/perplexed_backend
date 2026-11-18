@@ -11,6 +11,8 @@ from app.models.content import (
     StakeholderPassageAccess,
 )
 from app.models.runtime import (
+    Alliance,
+    AllianceMember,
     Announcement,
     Document,
     Event,
@@ -18,6 +20,7 @@ from app.models.runtime import (
     LlmCall,
     Message,
     Phase,
+    SubmissionVersion,
     Team,
     TeamBoard,
     TeamDepartmentState,
@@ -29,6 +32,8 @@ from app.models.runtime import (
 )
 
 __all__ = [
+    "Alliance",
+    "AllianceMember",
     "Announcement",
     "Base",
     "Clue",
@@ -45,6 +50,7 @@ __all__ = [
     "Stakeholder",
     "StakeholderPassageAccess",
     "Team",
+    "SubmissionVersion",
     "TeamBoard",
     "TeamDepartmentState",
     "TeamDisclosure",

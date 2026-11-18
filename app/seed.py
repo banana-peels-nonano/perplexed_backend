@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,6 +68,8 @@ DEFAULT_PHASE_SECONDS = {
     "round2": 0,
 }
 INTERVIEW_PHASES = {"solo", "alliance_window", "joint"}
+ALLIANCE_PHASES = {"alliance_window", "joint"}  # requests can be made and accepted
+SUBMISSION_PHASES = {"solo", "alliance_window", "joint"}  # the sheet can be saved/submitted
 
 
 @dataclass
@@ -202,6 +204,11 @@ async def ensure_event(session: AsyncSession, case: Case, name: str) -> Event:
         event.brief = case.brief  # the brief follows the file, like the rest of the content
         return event
     config = {**DEFAULT_EVENT_CONFIG, "labels": list(case.labels)}
+    for key, value in case.config.items():  # the case's own rules, merged one level deep
+        base = config.get(key)
+        config[key] = (
+            {**base, **value} if isinstance(base, dict) and isinstance(value, dict) else value
+        )
     event = Event(name=name, case_id=case.case_id, config=config, brief=case.brief)
     session.add(event)
     await session.flush()  # sends the INSERT so event.id is filled in
@@ -213,7 +220,11 @@ async def ensure_event(session: AsyncSession, case: Case, name: str) -> Event:
                 display_name=key.replace("_", " ").title(),
                 seq=seq,
                 planned_seconds=DEFAULT_PHASE_SECONDS.get(key, 0),
-                capabilities={"interview": key in INTERVIEW_PHASES},
+                capabilities={
+                    "interview": key in INTERVIEW_PHASES,
+                    "alliances": key in ALLIANCE_PHASES,
+                    "submissions": key in SUBMISSION_PHASES,
+                },
             )
         )
     return event
@@ -338,9 +349,22 @@ async def run_seed(
     return report
 
 
+async def wipe_everything(session: AsyncSession) -> None:
+    """Empty every table (content AND teams, threads, evidence, submissions). For switching a
+    database to a different case before an event; never during one."""
+    from app.models import Base
+
+    names = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
+    await session.execute(text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
+
+
 async def _main(args: argparse.Namespace) -> None:
     engine = get_engine()
     try:
+        if args.fresh:
+            async with make_sessionmaker(engine)() as session, session.begin():
+                await wipe_everything(session)
+            print("wiped: every table is empty")
         async with make_sessionmaker(engine)() as session, session.begin():
             # session.begin(): everything above commits together, or nothing does
             report = await run_seed(
@@ -376,6 +400,13 @@ def main() -> None:
     p.add_argument("--event-name", default="PERPLEXED dev")
     p.add_argument("--rotate-codes", action="store_true", help="issue new codes to existing teams")
     p.add_argument("--start-phase", help="dev only: make this phase running, e.g. solo")
+    p.add_argument(
+        "--fresh",
+        action="store_true",
+        help="EMPTY THE DATABASE first (teams, threads, evidence too). Use when switching to a "
+        "different case: cases share the content tables, so loading a second one on top mixes "
+        "their people and records.",
+    )
     asyncio.run(_main(p.parse_args()))
 
 

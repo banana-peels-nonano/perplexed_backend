@@ -1,6 +1,6 @@
 # PERPLEXED 2.0 — Engineering Status
 
-Last updated: 16 November 2026
+Last updated: 19 November 2026
 
 ## 1. Project objective
 
@@ -61,7 +61,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 |---|---|---|
 | Development environment | Done | Docker, Postgres 17, venv, test database |
 | FastAPI foundation | Done | settings, error envelope, health check |
-| Database schema and migrations | Done | migrations 0001–0006 |
+| Database schema and migrations | Done | migrations 0001–0008 |
 | Case format, loader, seed | Done | validated TOML; placeholder case only |
 | Authentication and teams | Done | access codes, sessions, team context |
 | Interview flow | Done | quota, idempotency, one question in flight, refund on failure, memory |
@@ -72,16 +72,18 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 | Event engine (phases) | Done | start/pause/resume/extend/end; timed phases close interviews on time |
 | Trust and HR mechanics | Done | per-question trust moves; HR per team per department (warning, complaint, 10-minute department lockout); every strike logged for efficiency scoring; numbers are defaults in event config until the seniors confirm |
 | Portal endpoints | Done | status (the team's own clock), evidence list, board, case brief, announcements, projector display |
-| Evidence board | Partial | storage and checks done; UI design pending (frontend team) |
+| Evidence board | Done | storage, checks, and the board UI (drag, notes, quotes, team-drawn links) |
+| Rounds, documents, results | Done | organisers add any number of rounds, hand out documents per round/company/team, publish each team's status |
 | Live updates (WebSockets) | Done | notify-then-refetch; session-cookie auth, origin check, tab cap, logout closes that laptop's sockets |
 | Admin and organiser endpoints | Done | token-protected: team registration, balanced company assignment, time back per team, announcements, prompt-attack alerts, HR log, clues found, team view with per-question decisions, fixes, live config, content reload, costs (ORGANISERS.md) |
-| Real case conversion | Pending | case expected Monday |
-| Alliances | Pending | |
-| Submissions and judging | Pending | |
-| Frontend integration | Pending | frontend owned by another team member |
-| Staging and production deployment | Pending | |
+| Real case conversion | Done (draft) | both cases from the 15 Nov design doc converted (kept in `content/`, never committed) |
+| Alliances | Done | cross-company requests, mutual lock, organiser pairing (incl. three teams), partner evidence after the lock |
+| Submissions | Done | Audit Findings Sheet: every version kept, server-side deadline, citations incl. partner evidence, cross-company rule |
+| Judging | Pending | judges read sheets in the console; scoring form not built |
+| Frontend | Done (first version) | `web/`: team portal, organiser console, projector page; served by the backend |
+| Staging and production deployment | Ready to run | Dockerfile, `deploy/` (compose, Caddy, nginx variant, 5-minute backups, setup script), `render.yaml` for free staging; waiting on SSH + DNS |
 
-Tests: 160 passing (`python -m pytest -q`).
+Tests: 173 passing (`python -m pytest -q`).
 
 ## 6. Measured so far (placeholder case)
 

@@ -155,6 +155,9 @@ class TeamDepartmentState(Base):
     department: Mapped[str] = mapped_column(Text, primary_key=True)
     strikes: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # when the count last started from zero (a lockout ran out, or organisers lifted it);
+    # per-stakeholder counting (hr.strike_scope) counts hr_flag rows after this
+    reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class HrFlag(Base):
@@ -335,3 +338,58 @@ class TeamRoundStatus(Base):
     message: Mapped[str] = mapped_column(Text, server_default=sql_text("''"))
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = _created_at()
+
+
+class Alliance(Base):
+    """Teams from different companies working together. 'pending' until every member has
+    confirmed, then 'locked' for good (only organisers can dissolve a locked one)."""
+
+    __tablename__ = "alliance"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'locked', 'dissolved')", name="status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("event.id"))
+    status: Mapped[str] = mapped_column(Text, server_default=sql_text("'pending'"))
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("team.id"))
+    by_organisers: Mapped[bool] = mapped_column(server_default=sql_text("false"))
+    created_at: Mapped[datetime] = _created_at()
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dissolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AllianceMember(Base):
+    """A team in an alliance. `active` is false once the alliance is dissolved; the partial
+    unique index means a team is in at most one locked alliance at a time."""
+
+    __tablename__ = "alliance_member"
+    __table_args__ = (
+        Index(
+            "uq_alliance_member_one_locked",
+            "team_id",
+            unique=True,
+            postgresql_where=sql_text("locked"),
+        ),
+    )
+
+    alliance_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("alliance.id"), primary_key=True)
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), primary_key=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    locked: Mapped[bool] = mapped_column(server_default=sql_text("false"))  # copy of status
+
+
+class SubmissionVersion(Base):
+    """One saved version of a team's Audit Findings Sheet for a round. Every save is kept;
+    `final` marks a version the team submitted. Server timestamps only."""
+
+    __tablename__ = "submission_version"
+    __table_args__ = (UniqueConstraint("team_id", "phase_id", "version", name="uq_submission"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), index=True)
+    phase_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("phase.id"))
+    version: Mapped[int] = mapped_column(Integer)
+    doc: Mapped[dict] = mapped_column(JSONB)
+    final: Mapped[bool] = mapped_column(server_default=sql_text("false"))
+    created_at: Mapped[datetime] = _created_at()

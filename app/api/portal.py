@@ -40,7 +40,7 @@ from app.models import (
     TeamDisclosure,
 )
 from app.portal.board import BoardIn, stored
-from app.portal.clock import interviews_open, phase_remaining, team_bonus
+from app.portal.clock import interviews_open, not_in_round, phase_remaining, team_bonus
 
 router = APIRouter(tags=["portal"])
 
@@ -103,7 +103,8 @@ async def status(team: CurrentTeam, session: DbSession) -> StatusOut:
             name=phase.display_name,
             status=phase.status,
             remaining_seconds=phase_remaining(phase, now, bonus),
-            interviews_open=interviews_open(phase, now, bonus),
+            interviews_open=interviews_open(phase, now, bonus)
+            and not await not_in_round(session, team.team_id, phase),
         )
     stakeholders: list[StakeholderOut] = []
     if team.company_id is not None:

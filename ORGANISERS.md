@@ -36,6 +36,60 @@ curl -s -H "$AUTH" -X POST $PX/teams/T004/access-code
 a question yet. The same `seed` gives the same draw, so you can rerun it in front of the
 room; leave it out for a fresh random one.
 
+## Rounds
+
+Rounds are phases. The case file seeds the first set; add as many more as you need.
+
+```bash
+curl -s -H "$AUTH" -X POST $PX/phases -H 'Content-Type: application/json' \
+  -d '{"key": "round3", "name": "Round 3", "planned_seconds": 1800, "capabilities": {"interview": true}}'
+curl -s -H "$AUTH" -X POST $PX/phases -H 'Content-Type: application/json' \
+  -d '{"key": "lunch", "name": "Lunch", "capabilities": {"interview": false}, "after": "solo"}'
+curl -s -H "$AUTH" -X PATCH $PX/phases/round3 -H 'Content-Type: application/json' -d '{"name": "Semi-final", "planned_seconds": 2400}'
+curl -s -H "$AUTH" -X PUT $PX/phases/order -H 'Content-Type: application/json' -d '{"keys": ["briefing", "solo", ...every round...]}'
+curl -s -H "$AUTH" -X DELETE $PX/phases/lunch      # only a round that never started
+```
+
+Keys are lowercase letters, digits and `_`. A round can't be deleted once it has started,
+or while the case unlocks evidence in it, or while documents/statuses point at it.
+Evidence the case unlocks "from" a round stays unlocked in every round after it, including
+rounds you add later.
+
+## Documents
+
+```bash
+# a note for everyone, visible now
+curl -s -H "$AUTH" -X POST $PX/documents -H 'Content-Type: application/json' \
+  -d '{"title": "Round 2 rules", "body": "# Round 2\n...", "release_now": true}'
+# a file for one company, released automatically when round3 starts
+curl -s -H "$AUTH" -X POST $PX/documents -H 'Content-Type: application/json' \
+  -d "{\"title\": \"Board pack\", \"company\": \"A\", \"round\": \"round3\", \"file\": {\"filename\": \"pack.pdf\", \"content_type\": \"application/pdf\", \"data_base64\": \"$(base64 -w0 pack.pdf)\"}}"
+# named teams only
+curl -s -H "$AUTH" -X POST $PX/documents -H 'Content-Type: application/json' \
+  -d '{"title": "Your feedback", "body": "...", "teams": ["T004", "T009"], "release_now": true}'
+curl -s -H "$AUTH" $PX/documents
+curl -s -H "$AUTH" -X PATCH $PX/documents/<id> -H 'Content-Type: application/json' -d '{"released": true}'
+curl -s -H "$AUTH" -X DELETE $PX/documents/<id>
+```
+
+Files up to 15 MB. A document is visible once released by hand, or when its round starts.
+Teams can't tell a document meant for someone else from one that doesn't exist.
+
+## Round results
+
+```bash
+# draft each team's status for a round (teams see nothing yet)
+curl -s -H "$AUTH" -X PUT $PX/phases/round2/statuses -H 'Content-Type: application/json' \
+  -d '{"entries": [{"team": "T001", "status": "advancing", "message": "See you in round 2."},
+                   {"team": "T002", "status": "eliminated", "message": "Thank you for playing."}]}'
+curl -s -H "$AUTH" $PX/phases/round2/statuses               # every team, drafted or not
+curl -s -H "$AUTH" -X POST $PX/phases/round2/statuses/publish   # everyone sees theirs at once
+```
+
+Statuses: `advancing`, `eliminated`, `waitlisted`, `pending`. Add `"publish": true` to the
+PUT to publish straight away. A published `eliminated` closes interviews for that team in
+that round.
+
 ## Phases
 
 ```bash

@@ -50,7 +50,7 @@ from app.models import (
     TeamDisclosure,
     TeamStakeholderState,
 )
-from app.portal.clock import interviews_open, team_bonus
+from app.portal.clock import interviews_open, not_in_round, team_bonus
 
 log = logging.getLogger(__name__)
 
@@ -217,6 +217,13 @@ async def ask_question(
         bonus = await team_bonus(session, team.team_id, phase)  # time given back to this team
         if not interviews_open(phase, datetime.now(UTC), bonus):  # incl. out of time
             raise ApiError(409, "PHASE_CLOSED", "interviews are closed in the current phase")
+        if await not_in_round(session, team.team_id, phase):
+            raise ApiError(409, "NOT_IN_ROUND", "your team is not taking part in this round")
+        phase_order = tuple(
+            await session.scalars(
+                select(Phase.key).where(Phase.event_id == event.id).order_by(Phase.seq)
+            )
+        )
 
         # HR is per (team, department). Lock the department's row for this transaction so
         # two laptops can't both read "no lockout" while a walk-out is being written.
@@ -364,6 +371,7 @@ async def ask_question(
                 topics=topics,
                 phase=phase.key,
                 disclosed=disclosed,
+                phase_order=phase_order,
             ),
         )
         ranked = rank_passages(

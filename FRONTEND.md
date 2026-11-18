@@ -78,6 +78,14 @@ Each card has `passage_id`, `record_id`, `record_title`, `excerpt`, `mode` and `
 - `GET /display` needs **no login**: it's for the projector. Event name, phase and clock,
   and the five newest broadcasts meant for everyone. Nothing team-specific.
 
+- `GET /rounds` → every round in order (`key`, `name`, `status`, `planned_seconds`,
+  `capabilities`) with `my_status` (`advancing` / `eliminated` / `waitlisted` / `pending`
+  + `message`) once organisers publish it. Show it prominently: it's how teams learn
+  whether they're through.
+- `GET /documents` → what the team has been handed; `GET /documents/{id}` returns
+  `{"title", "body"}` for a note (markdown) or the file itself (link to it directly).
+- Error `NOT_IN_ROUND` (409): the team was eliminated from the current round.
+
 ## 6. What the UI must never do
 
 - **Never show trust**, or anything that suggests it: no meter, no mood indicator. Trust is
@@ -106,6 +114,8 @@ refetch it through the normal endpoints. It never carries content.
 | `{"type": "content"}` | everything on screen (the case was reloaded) |
 | `{"type": "team"}` | `GET /status` and `GET /brief` (the team's company was assigned or changed) |
 | `{"type": "announcement"}` | `GET /announcements` (new or retracted broadcast) |
+| `{"type": "documents"}` | `GET /documents` (released, withdrawn, or a round started) |
+| `{"type": "rounds"}` | `GET /rounds` (a result for this team was published) |
 | `{"type": "ping"}` | nothing (keep-alive every 25 s) |
 
 Close codes: `4401` not logged in or logged out → login screen; `4403` wrong origin;

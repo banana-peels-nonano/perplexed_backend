@@ -15,6 +15,8 @@ never carries content, so it can never become a second way for secrets to leave.
                                                    /status and /brief
     {"type": "announcement"}                       organisers broadcast (or retracted)
                                                    something: refetch /announcements
+    {"type": "documents"}                          refetch /documents
+    {"type": "rounds"}                             a round result was published: /rounds
     {"type": "ping"}                               keep-alive, every 25 s; ignore it
 
 The registry lives in this process's memory (no Redis, D-009), so the app must run as a

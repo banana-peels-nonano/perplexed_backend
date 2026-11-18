@@ -168,7 +168,9 @@ async def start(key: str, session: DbSession, request: Request) -> PhaseAdminOut
     target.paused_at = None
     target.total_paused_seconds = 0
     await session.commit()
+    # documents attached to this round become visible now
     await request.app.state.hub.broadcast({"type": "phase"})
+    await request.app.state.hub.broadcast({"type": "documents"})
     return _phase_out(target, datetime.now(UTC))
 
 

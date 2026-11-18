@@ -10,7 +10,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from app.models import TeamTimeBonus
+from app.models import TeamRoundStatus, TeamTimeBonus
 
 
 def remaining_seconds(
@@ -73,3 +73,17 @@ async def team_bonus(session, team_id, phase) -> int:
         )
     )
     return seconds or 0
+
+
+async def not_in_round(session, team_id, phase) -> bool:
+    """True when organisers have published that this team is out of this round."""
+    if phase is None:
+        return False
+    status = await session.scalar(
+        select(TeamRoundStatus.status).where(
+            TeamRoundStatus.team_id == team_id,
+            TeamRoundStatus.phase_id == phase.id,
+            TeamRoundStatus.published_at.is_not(None),
+        )
+    )
+    return status == "eliminated"

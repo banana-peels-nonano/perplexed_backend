@@ -12,6 +12,7 @@ from app.models.content import (
 )
 from app.models.runtime import (
     Announcement,
+    Document,
     Event,
     HrFlag,
     LlmCall,
@@ -21,6 +22,7 @@ from app.models.runtime import (
     TeamBoard,
     TeamDepartmentState,
     TeamDisclosure,
+    TeamRoundStatus,
     TeamSession,
     TeamStakeholderState,
     TeamTimeBonus,
@@ -30,6 +32,7 @@ __all__ = [
     "Announcement",
     "Base",
     "Clue",
+    "Document",
     "Company",
     "Department",
     "Event",
@@ -45,6 +48,7 @@ __all__ = [
     "TeamBoard",
     "TeamDepartmentState",
     "TeamDisclosure",
+    "TeamRoundStatus",
     "TeamSession",
     "TeamStakeholderState",
     "TeamTimeBonus",

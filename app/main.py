@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from sqlalchemy import text
 
-from app.api import admin, auth, interview, live, portal, stakeholders
+from app.api import admin, auth, interview, live, portal, rounds, stakeholders
 from app.api.errors import install_error_handlers
 from app.auth.context import DbSession
 from app.config import get_settings
@@ -38,6 +38,8 @@ def create_app(provider: LlmProvider | None = None) -> FastAPI:
     app.include_router(interview.router, prefix=API_PREFIX)
     app.include_router(portal.router, prefix=API_PREFIX)
     app.include_router(admin.router, prefix=API_PREFIX)
+    app.include_router(rounds.admin, prefix=API_PREFIX)
+    app.include_router(rounds.teams, prefix=API_PREFIX)
     app.include_router(live.router, prefix=API_PREFIX)
 
     @app.get("/healthz", tags=["ops"])

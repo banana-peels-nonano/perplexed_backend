@@ -26,12 +26,18 @@ class QuestionContext:
     topics: frozenset[str]  # from the classifier, within the company vocabulary
     phase: str
     disclosed: frozenset[str]  # passage ids this TEAM has already been shown, any stakeholder
+    # the event's rounds in running order (organisers can add rounds the case file never
+    # named); None = the order in the case file
+    phase_order: tuple[str, ...] | None = None
 
 
 def eligible_passages(case: Case, q: QuestionContext) -> dict[str, Mode]:
     """Return {passage_id: mode} for every passage the stakeholder may use. Never includes deny."""
     stakeholder = case.stakeholder[q.stakeholder]
-    phase_index = case.phases.index(q.phase)
+    order = list(q.phase_order or case.phases)
+    if q.phase not in order:
+        order.append(q.phase)
+    phase_index = order.index(q.phase)
     result: dict[str, Mode] = {}
     for entry in case.access_for(q.stakeholder):
         if case.company_of_passage(entry.passage) != stakeholder.company:
@@ -45,7 +51,10 @@ def eligible_passages(case: Case, q: QuestionContext) -> dict[str, Mode]:
             continue
         if not set(entry.requires_disclosed) <= q.disclosed:
             continue
-        if entry.phase_from is not None and phase_index < case.phases.index(entry.phase_from):
+        if entry.phase_from is not None and (
+            entry.phase_from not in order  # that round was deleted: it never arrives
+            or phase_index < order.index(entry.phase_from)
+        ):
             continue
         result[entry.passage] = mode
     return result
@@ -59,6 +68,7 @@ def question_context(
     topics: Iterable[str],
     phase: str,
     disclosed: Iterable[str] = (),
+    phase_order: Iterable[str] | None = None,
 ) -> QuestionContext:
     return QuestionContext(
         stakeholder=stakeholder,
@@ -67,4 +77,5 @@ def question_context(
         topics=frozenset(topics),
         phase=phase,
         disclosed=frozenset(disclosed),
+        phase_order=tuple(phase_order) if phase_order is not None else None,
     )

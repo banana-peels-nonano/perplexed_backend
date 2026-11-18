@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     Text,
     UniqueConstraint,
@@ -285,3 +286,52 @@ class LlmCall(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
+
+
+class Document(Base):
+    """Material organisers hand teams: a markdown note or a file (PDF, sheet, image).
+
+    Audience: everyone, one company (company_id), or named teams (team_ids). A document is
+    visible once released by hand (released_at) or, if it belongs to a round (phase_id),
+    as soon as that round starts.
+    """
+
+    __tablename__ = "document"
+    __table_args__ = (CheckConstraint("kind IN ('markdown', 'file')", name="kind"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("event.id"))
+    phase_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("phase.id"))
+    title: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text, server_default=sql_text("''"))  # markdown kind
+    filename: Mapped[str | None] = mapped_column(Text)
+    content_type: Mapped[str | None] = mapped_column(Text)
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)  # file kind
+    size_bytes: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))
+    company_id: Mapped[str | None] = mapped_column(ForeignKey("company.id"))
+    team_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)))
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created_at()
+
+
+class TeamRoundStatus(Base):
+    """What organisers tell a team about a round: in it, out of it, or waiting.
+
+    Drafted freely, shown to teams only once published (so results go out together).
+    A published 'eliminated' closes interviews for that team in that round.
+    """
+
+    __tablename__ = "team_round_status"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('advancing', 'eliminated', 'waitlisted', 'pending')", name="status"
+        ),
+    )
+
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), primary_key=True)
+    phase_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("phase.id"), primary_key=True)
+    status: Mapped[str] = mapped_column(Text)
+    message: Mapped[str] = mapped_column(Text, server_default=sql_text("''"))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = _created_at()

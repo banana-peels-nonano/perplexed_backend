@@ -37,6 +37,8 @@ EXPECTED_TABLES = {
     "team_time_bonus",
     "announcement",
     "clue",
+    "document",
+    "team_round_status",
 }
 
 

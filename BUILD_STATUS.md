@@ -61,7 +61,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 |---|---|---|
 | Development environment | Done | Docker, Postgres 17, venv, test database |
 | FastAPI foundation | Done | settings, error envelope, health check |
-| Database schema and migrations | Done | migrations 0001–0008 |
+| Database schema and migrations | Done | migrations 0001–0009 |
 | Case format, loader, seed | Done | validated TOML; placeholder case only |
 | Authentication and teams | Done | access codes, sessions, team context |
 | Interview flow | Done | quota, idempotency, one question in flight, refund on failure, memory |
@@ -79,11 +79,13 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 | Real case conversion | Done (draft) | both cases from the 15 Nov design doc converted (kept in `content/`, never committed) |
 | Alliances | Done | cross-company requests, mutual lock, organiser pairing (incl. three teams), partner evidence after the lock |
 | Submissions | Done | Audit Findings Sheet: every version kept, server-side deadline, citations incl. partner evidence, cross-company rule |
+| Records tab | Done | organisers switch it live: off (default), titles only, or full documents (then citable; partner company's after an alliance locks); "in confidence" records and deleted text never shown |
+| Team self-registration | Done | `/register`: team name + 2–4 members with @thapar.edu addresses; one email with the shared access code to every member (SMTP: Gmail app password or Brevo); console tab to open/close, resend, remove |
 | Judging | Pending | judges read sheets in the console; scoring form not built |
 | Frontend | Done (first version) | `web/`: team portal, organiser console, projector page; served by the backend |
 | Staging and production deployment | Ready to run | Dockerfile, `deploy/` (compose, Caddy, nginx variant, 5-minute backups, setup script), `render.yaml` for free staging; waiting on SSH + DNS |
 
-Tests: 173 passing (`python -m pytest -q`).
+Tests: 182 passing (`python -m pytest -q`).
 
 ## 6. Measured so far (placeholder case)
 
@@ -99,15 +101,13 @@ These must be re-measured on the real case.
 
 ## 7. Next
 
-1. Alliances: cross-company requests, mutual lock, organiser pairing (incl. one
-   three-team alliance), partner evidence after the lock.
-2. Submissions: Audit Findings Sheet with versions, hard deadline, cross-company finding,
-   citations.
+1. Email account for registration (new Gmail + app password, or Brevo) and a test send.
+2. Deploy on the event server by IP (DEPLOY.md), then switch to the subdomain.
 3. Judging: judge accounts, Round 1 and Round 2 rubrics, efficiency data, tie-breakers,
    final score.
-4. Deployment on an Azure for Students VM (Docker Compose, Caddy, backups), load test.
+4. Load test on the event server.
 5. Real case conversion, its own hostile-question suite and recall test; rehearsal.
-6. Frontend integration once the frontend arrives (FRONTEND.md, OpenAPI at `/docs`).
+6. Frontend polish.
 
 ## 8. Event-rule questions to resolve
 

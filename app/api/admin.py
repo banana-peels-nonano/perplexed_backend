@@ -880,6 +880,19 @@ class Models(BaseModel):
     classify: str | None = None
 
 
+class RegistrationRules(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    open: bool | None = None
+    min_members: int | None = Field(default=None, ge=1, le=10)
+    max_members: int | None = Field(default=None, ge=1, le=10)
+    domain: str | None = Field(default=None, pattern=r"^[a-z0-9.-]+\.[a-z]{2,}$")
+
+
+class RecordsTab(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["off", "titles", "full"]
+
+
 class ConfigPatch(BaseModel):
     """Only settings that are safe to change while the event runs. trust_start and
     default_quota apply to teams created afterwards; use /quota for existing teams."""
@@ -893,6 +906,8 @@ class ConfigPatch(BaseModel):
     models: Models | None = None
     trust_start: int | None = Field(default=None, ge=0, le=100)
     default_quota: int | None = Field(default=None, ge=0, le=100)
+    registration: RegistrationRules | None = None
+    records_tab: RecordsTab | None = None
 
 
 def _merge(base: dict, patch: dict) -> dict:
@@ -908,11 +923,13 @@ async def get_config(session: DbSession) -> dict[str, Any]:
 
 
 @router.patch("/config")
-async def patch_config(body: ConfigPatch, session: DbSession) -> dict[str, Any]:
+async def patch_config(body: ConfigPatch, session: DbSession, request: Request) -> dict[str, Any]:
     event = await current_event(session)
     event.config = _merge(event.config, body.model_dump(exclude_none=True))
     flag_modified(event, "config")
     await session.commit()
+    if body.records_tab is not None:  # every open portal shows or hides the tab now
+        await request.app.state.hub.broadcast({"type": "records"})
     return event.config
 
 

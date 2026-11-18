@@ -240,6 +240,20 @@ function Results() {
 }
 
 // ------------------------------------------------------------------ documents
+function RecordsTabSwitch() {
+  const [cfg, reload] = usePoll(() => A("/config"), 0);
+  const mode = cfg?.records_tab?.mode || "off";
+  const opts = [["off", "Off", "records come out only in interviews"], ["titles", "Titles", "teams see what exists, not what it says"], ["full", "Full", "teams read their company's documents and can cite them"]];
+  const set = async (m) => {
+    if (m === mode) return;
+    if (m === "full" && !confirm("Show every team its company's documents in full? Interviews stop being the only way in, and every passage on the tab becomes citable.")) return;
+    await run(() => A("/config", { method: "PATCH", body: { records_tab: { mode: m } } }), `Records tab: ${m}`); reload();
+  };
+  return html`<div class="panel"><div class="panel-h"><span class="strong">Records tab</span><span class="small muted">${opts.find((o) => o[0] === mode)?.[2]}</span></div>
+    <div class="panel-b row" style="gap:8px">${opts.map(([m, l]) => html`<button class=${"btn" + (m === mode ? "" : " ghost")} onClick=${() => set(m)}>${l}</button>`)}
+      <span class="small muted right">Never shown: "in confidence" records and deleted text. Partners' documents appear after an alliance locks.</span></div></div>`;
+}
+
 function Documents() {
   const { phases, companies } = useStore(C);
   const [docs, reload] = usePoll(() => A("/documents"), 0);
@@ -264,6 +278,7 @@ function Documents() {
   };
   return html`<div class="col" style="gap:22px">
     <h1 class="hero-title" style="font-size:34px">Documents</h1>
+    <${RecordsTabSwitch} />
     <form class="panel" onSubmit=${submit}><div class="panel-h"><span class="strong">Hand out a document</span></div><div class="panel-b col">
       <label class="field">Title<input class="input" required value=${f.title} onInput=${(e) => setF({ ...f, title: e.target.value })} /></label>
       <div class="grid2">
@@ -325,6 +340,36 @@ function Alerts({ compact }) {
     ${!compact && html`<div class="kicker" style="margin-top:12px">HR log</div>
       <table class="t"><thead><tr><th>When</th><th>Team</th><th>Who</th><th>Dept</th><th>Label</th><th>Outcome</th><th>Question</th></tr></thead>
       <tbody>${(flags || []).map((f) => html`<tr><td>${ago(f.at)}</td><td>${f.team}</td><td>${f.stakeholder_id}</td><td>${f.department}</td><td>${f.label}</td><td>${f.outcome}</td><td>${f.question}</td></tr>`)}</tbody></table>`}
+  </div>`;
+}
+
+// ------------------------------------------------------------------ registration
+function Registrations() {
+  const [data, reload] = usePoll(() => A("/registrations"), 15000);
+  const [q, setQ] = useState("");
+  if (!data) return html`<div class="empty">Loading…</div>`;
+  const r = data.rules;
+  const setRule = async (patch, ok) => { await run(() => A("/config", { method: "PATCH", body: { registration: patch } }), ok); reload(); };
+  const shown = data.teams.filter((t) => !q || (t.code + t.name + t.members.map((m) => m.email).join(" ")).toLowerCase().includes(q.toLowerCase()));
+  const registered = data.teams.filter((t) => t.members.length).length;
+  return html`<div class="col" style="gap:20px">
+    <div class="row"><h1 class="hero-title" style="font-size:34px">Registration</h1><span class="right muted">${registered} ${registered === 1 ? "team" : "teams"} signed up</span></div>
+    ${!data.smtp_configured && html`<div class="alert"><b>Email isn't set up.</b> Teams can still register, but no codes go out until SMTP_HOST, SMTP_USER, SMTP_PASSWORD and SMTP_FROM are in the server's .env. Then use Resend.</div>`}
+    <div class="panel"><div class="panel-b row" style="flex-wrap:wrap;gap:16px">
+      <span class=${"chip" + (r.open ? " solid" : "")}>${r.open ? "open" : "closed"}</span>
+      <button class="btn" onClick=${() => setRule({ open: !r.open }, r.open ? "Registration closed" : "Registration open")}>${r.open ? "Close registration" : "Open registration"}</button>
+      <label class="row small">Members <input class="input" type="number" min="1" max="10" style="width:64px;padding:4px 6px" value=${r.min_members} onChange=${(e) => setRule({ min_members: +e.target.value }, "Saved")} /> to
+        <input class="input" type="number" min="1" max="10" style="width:64px;padding:4px 6px" value=${r.max_members} onChange=${(e) => setRule({ max_members: +e.target.value }, "Saved")} /></label>
+      <label class="row small">Domain <input class="input" style="width:160px;padding:4px 6px" value=${r.domain} onChange=${(e) => setRule({ domain: e.target.value.trim().toLowerCase() }, "Saved")} /></label>
+      <a class="right small" href="/register" target="_blank">Open the sign-up page ↗</a>
+    </div></div>
+    <input class="input" style="max-width:300px" placeholder="Filter by team or email…" value=${q} onInput=${(e) => setQ(e.target.value)} />
+    <table class="t"><thead><tr><th>Team</th><th>Members</th><th>Company</th><th>Last email</th><th></th></tr></thead>
+      <tbody>${shown.map((t) => html`<tr key=${t.code}><td><b>${t.code}</b> ${t.name}</td>
+        <td class="small">${t.members.map((m) => html`<div>${m.name} · ${m.email}</div>`)}</td><td>${t.company || "—"}</td>
+        <td>${t.last_email ? html`<span class=${"chip" + (t.last_email.status === "sent" ? " solid" : "")} title=${t.last_email.error || ""}>${t.last_email.status}</span> <span class="tiny muted">${ago(t.last_email.at)}</span>` : "—"}</td>
+        <td style="white-space:nowrap">${t.members.length ? html`<button class="btn ghost small" onClick=${async () => { if (confirm(`Send ${t.code} a new code? The old one stops working.`)) { await run(() => A(`/teams/${t.code}/resend`, { method: "POST" }), "Sent"); reload(); } }}>Resend code</button>` : null}
+          <button class="btn link small" onClick=${async () => { if (confirm(`Remove ${t.code} ${t.name}? Only possible before they've played.`)) { await run(() => A(`/teams/${t.code}`, { method: "DELETE" }), "Removed"); reload(); } }}>Remove</button></td></tr>`)}</tbody></table>
   </div>`;
 }
 
@@ -412,7 +457,7 @@ function Settings() {
 }
 
 // ------------------------------------------------------------------ app
-const TABS = [["live", "Live", Live], ["rounds", "Rounds", Rounds], ["teams", "Teams", Teams], ["results", "Results", Results], ["alliances", "Alliances", Alliances], ["submissions", "Submissions", Submissions], ["documents", "Documents", Documents], ["announcements", "Announcements", Announcements], ["alerts", "Alerts", Alerts], ["settings", "Settings", Settings]];
+const TABS = [["live", "Live", Live], ["registration", "Registration", Registrations], ["rounds", "Rounds", Rounds], ["teams", "Teams", Teams], ["results", "Results", Results], ["alliances", "Alliances", Alliances], ["submissions", "Submissions", Submissions], ["documents", "Documents", Documents], ["announcements", "Announcements", Announcements], ["alerts", "Alerts", Alerts], ["settings", "Settings", Settings]];
 function Console() {
   const { token, tab } = useStore(C);
   useEffect(() => { if (token) refreshShared(); }, [token]);

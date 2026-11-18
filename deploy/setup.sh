@@ -13,14 +13,15 @@ if ! docker info >/dev/null 2>&1; then DC="sudo $DC"; fi
 
 if [[ ! -f .env ]]; then
   say "Creating deploy/.env"
-  read -rp "Domain (e.g. perplexed.saturnalia.in; empty = plain http on this machine's IP): " domain
+  read -rp "Domain (e.g. perplexed.example.org; leave EMPTY to serve plain http on this server's IP for now): " domain
   read -rsp "Anthropic API key (event key): " akey; echo
   pg=$(openssl rand -hex 24)
   admin=$(openssl rand -base64 36 | tr -d '/+=' | cut -c1-43)
-  secure=true; [[ -z "$domain" ]] && secure=false
+  secure=true
+  if [[ -z "$domain" ]]; then domain=":80"; secure=false; fi  # IP only: http, no certificate
   umask 077
   cat > .env <<ENV
-DOMAIN=${domain:-localhost}
+DOMAIN=$domain
 POSTGRES_PASSWORD=$pg
 ADMIN_TOKEN=$admin
 ANTHROPIC_API_KEY=$akey
@@ -28,22 +29,30 @@ GEMINI_API_KEY=
 COOKIE_SECURE=$secure
 BACKUP_EVERY_SECONDS=300
 BACKUP_KEEP=288
+# email for team registration (access codes). Fill in, then: docker compose ... up -d
+# Gmail: smtp.gmail.com / 587 / the address / a 16-character app password
+# SMTP_FROM needs quotes: SMTP_FROM="PERPLEXED 2.0 <someone@gmail.com>"
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+PUBLIC_URL=
 ENV
   chmod 600 .env
   say "Organiser token (also in deploy/.env; paste it into /console):"
   echo "$admin"
 fi
-set -a; . ./.env; set +a
+# read only what this script needs (don't `source` .env: values like SMTP_FROM have spaces)
+env_get() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -E 's/[[:space:]]+#.*$//; s/^"(.*)"$/\1/'; }
+DOMAIN=$(env_get DOMAIN); BACKUP_EVERY_SECONDS=$(env_get BACKUP_EVERY_SECONDS)
 mkdir -p backups ../content
 
-PROFILE=""
-if [[ "${DOMAIN:-localhost}" != "localhost" ]]; then
-  if ss -ltn 2>/dev/null | grep -qE ':(80|443)\s'; then
-    say "Ports 80/443 are already taken on this server (an existing nginx?)."
-    echo "Starting WITHOUT Caddy. Point your proxy at 127.0.0.1:8000 (see deploy/nginx-perplexed.conf)."
-  else
-    PROFILE="--profile caddy"
-  fi
+PROFILE="--profile caddy"
+if ! $DC ps --status running 2>/dev/null | grep -q caddy && ss -ltn 2>/dev/null | grep -qE ':(80|443)\s'; then
+  say "Ports 80/443 are already taken on this server (an existing nginx?)."
+  echo "Starting WITHOUT Caddy. Point your proxy at 127.0.0.1:8000 (see deploy/nginx-perplexed.conf)."
+  PROFILE=""
 fi
 
 say "Building and starting"
@@ -65,6 +74,10 @@ fi
 # later case updates: put the file in content/ and use /console → Settings → Reload the case
 
 say "Done."
-if [[ -n "$PROFILE" ]]; then echo "  https://$DOMAIN/          team portal"; echo "  https://$DOMAIN/console   organisers"; echo "  https://$DOMAIN/display   projector"
-else echo "  http://<server-ip>:8000 is loopback-only; put a proxy in front (deploy/nginx-perplexed.conf)"; fi
+if [[ -z "$PROFILE" ]]; then echo "  the app is on 127.0.0.1:8000 only; put your proxy in front (deploy/nginx-perplexed.conf)"
+elif [[ "$DOMAIN" == ":80" ]]; then
+  ip=$(curl -fsS -4 https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
+  echo "  http://$ip/          team portal      (plain http: for testing until the domain exists)"
+  echo "  http://$ip/console   organisers"; echo "  http://$ip/display   projector"
+else echo "  https://$DOMAIN/          team portal"; echo "  https://$DOMAIN/console   organisers"; echo "  https://$DOMAIN/display   projector"; fi
 echo "  backups: deploy/backups/ every ${BACKUP_EVERY_SECONDS:-300}s"

@@ -2,7 +2,7 @@
 // draws a link (that would do the deduction the competition judges).
 
 import { html, useEffect, useRef, useState } from "./vendor/preact-htm.js";
-import { api, useStore, toast } from "./lib.js";
+import { api, useStore, toast, evidencePool } from "./lib.js";
 
 const W = 240;
 const newId = (p) => `${p}${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
@@ -48,8 +48,8 @@ export function Board({ S, hasTicker }) {
   }, [b, dirty]);
 
   const change = (fn) => { setB((cur) => fn(cur)); setDirty(true); };
-  // the team's own evidence, plus a locked alliance partner's (shared after the lock)
-  const pool = [...s.evidence, ...s.partnerEvidence.filter((p) => !s.evidence.some((e) => e.passage_id === p.passage_id))];
+  // the team's own evidence, a locked alliance partner's, and the records tab (when full)
+  const pool = evidencePool(s);
   const evidenceById = Object.fromEntries(pool.map((e) => [e.passage_id, e]));
   const names = Object.fromEntries((s.status?.stakeholders || []).map((x) => [x.id, x.name]));
 
@@ -107,11 +107,12 @@ export function Board({ S, hasTicker }) {
 
   return html`<div class=${"board-wrap" + (hasTicker ? " has-ticker" : "")}>
     <aside class="board-side">
-      <div class="kicker">Your evidence · ${s.evidence.length}${s.partnerEvidence.length ? ` + ${s.partnerEvidence.length} from partners` : ""}</div>
+      <div class="kicker">Your evidence · ${s.evidence.length}${s.partnerEvidence.length ? ` + ${s.partnerEvidence.length} from partners` : ""}${s.records?.mode === "full" ? " + records" : ""}</div>
       <input class="input" placeholder="Filter…" value=${q} onInput=${(e) => setQ(e.target.value)} />
       ${side.length ? side.map((e) => html`<div class="ev" key=${e.passage_id} style="padding:10px">
           <div class="ev-title">${e.record_title}</div>
-          <div class="ev-meta">${e.record_id} · ${e.mode} · ${e.stakeholder_name}${e.team_code ? ` · via ${e.team_code}` : ""}</div>
+          <div class="ev-meta">${e.mode === "record" ? `${e.record_id} · records tab${e.mine ? "" : " · partner"}` : `${e.record_id} · ${e.mode} · ${e.stakeholder_name}${e.team_code ? ` · via ${e.team_code}` : ""}`}</div>
+          ${e.mode === "record" && html`<div class="ev-x muted" style="font-size:11.5px;margin-top:4px">${e.excerpt.length > 90 ? e.excerpt.slice(0, 90) + "…" : e.excerpt}</div>`}
           <div class="ev-actions"><button class="btn ghost small" disabled=${onBoard.has(e.passage_id)} onClick=${() => addEvidence(e.passage_id)}>${onBoard.has(e.passage_id) ? "On the board" : "Add →"}</button></div>
         </div>`) : html`<div class="empty small">Evidence you're shown in interviews lands here.</div>`}
     </aside>

@@ -42,6 +42,8 @@ EXPECTED_TABLES = {
     "alliance",
     "alliance_member",
     "submission_version",
+    "team_member",
+    "email_log",
 }
 
 

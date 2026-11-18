@@ -14,7 +14,7 @@ export const S = createStore({
   me: undefined, // undefined = checking, null = logged out
   status: null, statusAt: 0,
   rounds: [], evidence: [], announcements: [], documents: [], brief: null,
-  alliance: null, partnerEvidence: [], sheetTick: 0,
+  alliance: null, partnerEvidence: [], sheetTick: 0, records: { mode: "off", records: [] },
   threads: {}, thinking: {}, fresh: new Set(), live: "offline",
   seenAnn: Number(localStorage.getItem("px_seen_ann") || 0),
   boardVersionSeen: 0,
@@ -51,12 +51,18 @@ const loaders = {
   brief: () => load("brief", async () => S.set({ brief: await api("/brief") })),
   alliance: () => load("alliance", async () => S.set({ alliance: await api("/alliance") })),
   partnerEvidence: () => load("pev", async () => S.set({ partnerEvidence: await api("/alliance/evidence") })),
+  records: () => load("records", async () => {
+    const was = S.get().records.mode;
+    const records = await api("/records");
+    S.set({ records });
+    if (was !== records.mode && records.mode !== "off" && S.get().me) toast(records.mode === "full" ? "Your company's records are open: see the Records tab." : "A list of your company's records is up: see the Records tab.", "holo");
+  }),
   thread: (sid) => load("thread", async () => {
     const msgs = await api(`/stakeholders/${sid}/messages`);
     S.set((s) => ({ threads: { ...s.threads, [sid]: msgs } }));
   }),
 };
-const loadAll = () => Promise.all([loaders.status(), loaders.rounds(), loaders.evidence(), loaders.announcements(), loaders.documents(), loaders.brief(), loaders.alliance(), loaders.partnerEvidence()]);
+const loadAll = () => Promise.all([loaders.status(), loaders.rounds(), loaders.evidence(), loaders.announcements(), loaders.documents(), loaders.brief(), loaders.alliance(), loaders.partnerEvidence(), loaders.records()]);
 
 // a published result the team hasn't acknowledged yet → a modal, once per laptop
 const resultModal = createStore({ round: null });
@@ -78,7 +84,8 @@ function onLive(ev) {
     case "team": loadAll(); break;
     case "thread": loaders.thread(ev.stakeholder_id); break;
     case "evidence": loaders.evidence(); loaders.partnerEvidence(); break;
-    case "alliance": loaders.alliance(); loaders.partnerEvidence(); break;
+    case "alliance": loaders.alliance(); loaders.partnerEvidence(); loaders.records(); break;
+    case "records": loaders.records(); break;
     case "submission": S.set((st) => ({ sheetTick: st.sheetTick + 1 })); break;
     case "board": S.set({ boardVersionSeen: ev.version }); break;
     case "announcement": loaders.announcements(); break;
@@ -165,7 +172,8 @@ function Login() {
           placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" autofocus aria-label="Access code" />
         ${err && html`<div class="error">${err}</div>`}
         <button class="btn" disabled=${busy || code.trim().length < 4} style="justify-content:center;padding:12px">${busy ? "Checking…" : "Enter →"}</button>
-        <p class="small muted">Up to two laptops per team. Your code is on your team card; keep it to yourselves.</p>
+        <p class="small muted">Up to two laptops per team. Your code was emailed to every member; keep it to yourselves.</p>
+        <a class="small" href="/register">No code yet? Register your team →</a>
       </form>
     </section>
   </div>`;
@@ -177,7 +185,7 @@ function Topbar({ path }) {
   const { phase, left } = useClock();
   const t = s.status?.team || s.me;
   const unseenDocs = false;
-  const links = [["/brief", "Brief"], ["/people", "People"], ["/evidence", "Evidence"], ["/board", "Board"], ["/alliance", "Alliance"], ["/sheet", "Findings"], ["/docs", "Documents"], ["/rounds", "Rounds"]];
+  const links = [["/brief", "Brief"], ["/people", "People"], ["/evidence", "Evidence"], ...(s.records.mode !== "off" ? [["/records", "Records"]] : []), ["/board", "Board"], ["/alliance", "Alliance"], ["/sheet", "Findings"], ["/docs", "Documents"], ["/rounds", "Rounds"]];
   const logout = async () => { try { await api("/auth/logout", { method: "POST" }); } catch {} S.set({ me: null }); };
   return html`<header class="topbar">
     <a href="#/people" style="text-decoration:none"><${Logo} /></a>
@@ -426,6 +434,37 @@ function EvidencePage() {
   </div>`;
 }
 
+const prettyKind = (k) => k.replace(/_/g, " ");
+
+function RecordsPage() {
+  const s = useStore(S);
+  const [q, setQ] = useState("");
+  const { mode, records } = s.records;
+  if (mode === "off") return html`<div class="page"><div class="empty"><span class="strong">Records are closed</span>For now, records come out only in interviews.</div></div>`;
+  const hit = (r) => !q || (r.title + r.kind + r.passages.map((p) => p.text).join(" ")).toLowerCase().includes(q.toLowerCase());
+  const own = records.filter((r) => !r.partner && hit(r));
+  const partner = records.filter((r) => r.partner && hit(r));
+  const Doc = ({ r }) => html`<article class="ev" key=${r.id}>
+    <div class="ev-h"><div><div class="ev-title">${r.title}</div><div class="ev-meta">${r.id} · ${prettyKind(r.kind)}${r.date ? ` · ${r.date}` : ""}</div></div>
+      ${r.partner && html`<span class="chip">partner</span>`}</div>
+    ${r.passages.map((p) => html`<div class="rec-p" key=${p.passage_id}><div class="ev-x">${p.text}</div>
+      <button class="btn link small" onClick=${() => pinToBoard({ kind: "evidence", passage_id: p.passage_id })}>Pin to board</button></div>`)}
+  </article>`;
+  return html`<div class="page">
+    <div class="row" style="margin-bottom:22px;align-items:flex-end">
+      <div><div class="kicker">${mode === "full" ? "Internal documents · citable" : "What exists · ask the people who'd know"}</div><h1 class="hero-title" style="font-size:36px;margin-top:10px">Records</h1></div>
+      <input class="input right" style="max-width:280px" placeholder="Search records…" value=${q} onInput=${(e) => setQ(e.target.value)} />
+    </div>
+    ${mode === "titles"
+      ? html`<p class="muted" style="max-width:640px;margin:0 0 20px">The organisers have released the list, not the contents. Records never explain themselves; the people who wrote them might.</p>
+        <table class="t"><thead><tr><th>Record</th><th>Kind</th><th>Date</th><th>Ref</th></tr></thead>
+        <tbody>${own.map((r) => html`<tr key=${r.id}><td><b>${r.title}</b></td><td>${prettyKind(r.kind)}</td><td class="tiny muted">${r.date}</td><td class="tiny muted">${r.id}</td></tr>`)}</tbody></table>`
+      : html`<p class="muted" style="max-width:640px;margin:0 0 20px">Your company's documents, as filed. Records never explain themselves, and some don't matter. Pin a passage to your board or cite it in your findings like interview evidence.</p>
+        ${own.length ? html`<div class="evidence-grid">${own.map((r) => html`<${Doc} r=${r} />`)}</div>` : html`<div class="empty">Nothing matches.</div>`}
+        ${partner.length ? html`<h2 class="strong" style="font-size:22px;margin:36px 0 12px">Partner company · ${partner.length}</h2><div class="evidence-grid">${partner.map((r) => html`<${Doc} r=${r} />`)}</div>` : null}`}
+  </div>`;
+}
+
 function Brief() {
   const s = useStore(S);
   const b = s.brief;
@@ -520,6 +559,7 @@ function App() {
   if (path.startsWith("/people/")) page = html`<${Room} sid=${decodeURIComponent(path.slice(8))} />`;
   else if (path.startsWith("/board")) page = html`<${Board} S=${S} hasTicker=${!!s.announcements[0]} />`;
   else if (path.startsWith("/evidence")) page = html`<${EvidencePage} />`;
+  else if (path.startsWith("/records")) page = html`<${RecordsPage} />`;
   else if (path.startsWith("/brief")) page = html`<${Brief} />`;
   else if (path.startsWith("/docs")) page = html`<${Docs} />`;
   else if (path.startsWith("/rounds")) page = html`<${Rounds} />`;

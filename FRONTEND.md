@@ -72,6 +72,13 @@ Each card has `passage_id`, `record_id`, `record_title`, `excerpt`, `mode` and `
 - `GET /evidence` lists every card the team has, from any stakeholder, with who disclosed
   it, when, and the record's date.
 
+`GET /records` is the records tab: `{mode: "off" | "titles" | "full", records: [{id,
+company_id, partner, kind, title, date, passages: [{passage_id, text}]}]}`. `passages` is
+empty unless the mode is `full`; then each passage may be pinned and cited exactly like a
+card from `/evidence` (the server accepts them). Hide the tab when the mode is `off`, and
+refetch on the live event `{"type": "records"}` (organisers changed the mode). `web/lib.js`
+`evidencePool(s)` merges the team's evidence, its partner's, and the tab into one list.
+
 ## 5. Brief and announcements
 
 - `GET /brief` → `{"case": "...", "company": {"id", "name", "brief"} | null}`. Both texts are
@@ -178,9 +185,18 @@ The current case (Northfield) is a **placeholder**; the real case arrives Monday
 hardcode stakeholder names, ids or counts: there are 3–5 stakeholders per company and 2
 companies, and everything comes from the API.
 
-## 10. Coming next
+## 10. Registration
 
-- Alliances (requests, confirmation, partner evidence).
-- Submissions (the Audit Findings Sheet) and judging.
+`/register` (`web/register.js`) is the only page without a login. It reads
+`GET /api/v1/registration` for `open`, `min_members`, `max_members`, `domain`, and posts
+`{team_name, members: [{name, email}], website}` (`website` is a honeypot: a hidden field
+people never fill). The reply has `team_code`, `emailed_to`, `email_status`
+(`sent | failed | not_configured`), and **never the access code**: the page must not try
+to show one. Errors: `REGISTRATION_CLOSED`, `BAD_TEAM_SIZE`, `BAD_EMAIL` (`details.emails`),
+`EMAIL_TAKEN` (`details.emails`), `NAME_TAKEN`, `TOO_MANY_REGISTRATIONS` (429).
+
+## 11. Coming next
+
+- Judging.
 
 This file is updated whenever the API changes.

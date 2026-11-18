@@ -27,10 +27,16 @@ async def partner_team_ids(session, team_id: uuid.UUID) -> list[uuid.UUID]:
 
 
 async def usable_passages(session, team_id: uuid.UUID) -> set[str]:
-    """Passages the team may cite or pin: its own, plus its locked partners'."""
-    teams = [team_id, *await partner_team_ids(session, team_id)]
-    return set(
+    """Passages the team may cite or pin: its own, plus its locked partners', plus whatever
+    the records tab shows when organisers have set it to full (app/portal/records.py)."""
+    from app.portal.records import full_tab_passages  # records imports the content store
+
+    partners = await partner_team_ids(session, team_id)
+    shown = set(
         await session.scalars(
-            select(TeamDisclosure.passage_id).where(TeamDisclosure.team_id.in_(teams))
+            select(TeamDisclosure.passage_id).where(
+                TeamDisclosure.team_id.in_([team_id, *partners])
+            )
         )
     )
+    return shown | await full_tab_passages(session, team_id, partners)

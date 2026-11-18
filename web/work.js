@@ -1,7 +1,7 @@
 // Alliance and Audit Findings Sheet pages.
 
 import { html, useEffect, useRef, useState } from "./vendor/preact-htm.js";
-import { api, useStore, fmtClock, ago, toast, Modal, useTick } from "./lib.js";
+import { api, useStore, fmtClock, ago, toast, Modal, useTick, evidencePool } from "./lib.js";
 import { S } from "./app.js";
 
 // ------------------------------------------------------------------ alliance
@@ -90,7 +90,7 @@ export function Sheet() {
 
   const left = sheet.closes_in_seconds == null ? null : Math.max(0, sheet.closes_in_seconds - (Date.now() - at) / 1000);
   const open = sheet.open && (left == null || left > 0);
-  const pool = [...s.evidence.map((e) => ({ ...e, mine: true })), ...s.partnerEvidence.filter((p) => !s.evidence.some((e) => e.passage_id === p.passage_id))];
+  const pool = evidencePool(s);
   const byId = Object.fromEntries(pool.map((e) => [e.passage_id, e]));
   const edit = (i, patch) => { setDraft((d) => ({ ...d, findings: d.findings.map((f, j) => (j === i ? { ...f, ...patch } : f)) })); setDirty(true); };
   const save = async (final) => {
@@ -148,8 +148,8 @@ export function Sheet() {
     ${pick != null && html`<${Modal} title="Cite evidence" onClose=${() => setPick(null)}>
       ${pool.length ? html`<div class="col">${pool.map((e) => { const on = draft.findings[pick]?.sources.includes(e.passage_id); return html`<label class="alert row" style="gap:12px;cursor:pointer">
         <input type="checkbox" checked=${on} onChange=${() => edit(pick, { sources: on ? draft.findings[pick].sources.filter((x) => x !== e.passage_id) : [...draft.findings[pick].sources, e.passage_id].slice(0, 20) })} />
-        <div class="grow"><b>${e.record_title}</b><div class="tiny muted">${e.record_id} · ${e.mode}${e.mine ? "" : ` · partner ${e.team_code}`}</div></div></label>`; })}</div>`
-        : html`<div class="empty">No evidence yet: it comes from interviews.</div>`}
+        <div class="grow"><b>${e.record_title}</b><div class="tiny muted">${e.mode === "record" ? `${e.record_id} · records tab${e.mine ? "" : " · partner"} · ${e.excerpt.slice(0, 70)}…` : `${e.record_id} · ${e.mode}${e.mine ? "" : ` · partner ${e.team_code}`}`}</div></div></label>`; })}</div>`
+        : html`<div class="empty">No evidence yet: it comes from interviews${s.records?.mode === "full" ? " and the records tab" : ""}.</div>`}
     </${Modal}>`}
   </div>`;
 }

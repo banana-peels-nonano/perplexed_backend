@@ -3,6 +3,59 @@
 One Linux server, Docker Compose: the app (API + frontend), Postgres, a backup job, and
 Caddy for HTTPS. Everything is in `deploy/`.
 
+## First deploy: the server's IP, no domain yet
+
+Plain http on `http://<server-ip>/`. Fine for setting up and testing; **not for the event**:
+without HTTPS, access codes and the organiser token cross the network readable. Switch to
+the subdomain (next section) before teams log in for real.
+
+```bash
+# 1. on your laptop: get in, check Docker
+ssh <user>@<server-ip>
+docker --version && docker compose version     # need Compose v2 ("docker compose", no dash)
+
+# 2. the code (private repo: use a GitHub deploy key or a fine-grained token, read-only)
+git clone https://github.com/banana-peels-nonano/perplexed_backend.git perplexed
+
+# 3. the case (from your laptop, in another terminal; never in git)
+ssh <user>@<server-ip> 'mkdir -p ~/perplexed/content'
+scp content/case1_silent_bundle.toml <user>@<server-ip>:~/perplexed/content/case.toml
+
+# 4. on the server
+cd ~/perplexed/deploy && ./setup.sh
+#    Domain: press Enter (empty = plain http on this IP)
+#    Anthropic key: the event key
+#    copy the organiser token it prints into your password manager
+```
+
+`setup.sh` writes `deploy/.env` with `DOMAIN=:80` and `COOKIE_SECURE=false`, starts Caddy on
+port 80, the app, Postgres and backups, loads `content/case.toml`, and prints
+`http://<ip>/`, `/console`, `/display`.
+
+If the page doesn't load from your laptop, the server's firewall is closed: `sudo ufw allow
+80/tcp` (and `443/tcp` for later), or open port 80 in the cloud provider's network rules.
+
+**Email for registration**: edit `deploy/.env` (`nano deploy/.env`), fill `SMTP_HOST`,
+`SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` (in quotes), and `PUBLIC_URL=http://<ip>/`, then
+`docker compose -f compose.prod.yaml --profile caddy up -d` (recreates the app with the new
+settings). Console → Registration stops saying "Email isn't set up".
+
+**A different case, or a clean slate** (wipes teams too; never during the event):
+
+```bash
+docker compose -f compose.prod.yaml exec app python -m app.seed content/case.toml --fresh
+```
+
+**Switching to the subdomain** once DNS points at the server:
+
+```bash
+nano deploy/.env    # DOMAIN=perplexed.<their-domain>   COOKIE_SECURE=true   PUBLIC_URL=https://perplexed.<their-domain>/
+docker compose -f compose.prod.yaml --profile caddy up -d
+```
+
+Caddy fetches the certificate by itself on the first visit (ports 80 and 443 must be open).
+Nothing in the database changes; teams and codes carry over.
+
 ## The event server (Saturnalia subdomain)
 
 Before you start:

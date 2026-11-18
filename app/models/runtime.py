@@ -393,3 +393,33 @@ class SubmissionVersion(Base):
     doc: Mapped[dict] = mapped_column(JSONB)
     final: Mapped[bool] = mapped_column(server_default=sql_text("false"))
     created_at: Mapped[datetime] = _created_at()
+
+
+class TeamMember(Base):
+    """A person on a team, as registered (thapar.edu address). An address belongs to one
+    team at most; stored lower-cased."""
+
+    __tablename__ = "team_member"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), index=True)
+    name: Mapped[str] = mapped_column(Text)
+    email: Mapped[str] = mapped_column(Text, unique=True)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class EmailLog(Base):
+    """Every email the platform tried to send, and whether it went (never the code itself)."""
+
+    __tablename__ = "email_log"
+    __table_args__ = (
+        CheckConstraint("status IN ('sent', 'failed', 'not_configured')", name="status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    team_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("team.id"), index=True)
+    recipients: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    subject: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created_at()

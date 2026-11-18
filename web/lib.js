@@ -197,6 +197,21 @@ export const Markdown = ({ src, class: cls = "md" }) =>
   html`<div class=${cls} dangerouslySetInnerHTML=${{ __html: markdown(src) }}></div>`;
 
 // ------------------------------------------------------------------ toasts
+// Everything a team may pin or cite: its interview evidence, a locked partner's, and the
+// records tab when organisers show documents in full. Same shape for all three.
+export function evidencePool(s) {
+  const seen = new Set();
+  const out = [];
+  const add = (e) => { if (!seen.has(e.passage_id)) { seen.add(e.passage_id); out.push(e); } };
+  s.evidence.forEach((e) => add({ ...e, mine: true }));
+  s.partnerEvidence.forEach(add);
+  (s.records?.records || []).forEach((r) => r.passages.forEach((p) => add({
+    passage_id: p.passage_id, record_id: r.id, record_title: r.title, record_date: r.date,
+    excerpt: p.text, mode: "record", stakeholder_name: "", mine: !r.partner, team_code: "records",
+  })));
+  return out;
+}
+
 export const toasts = createStore({ items: [] });
 export function toast(text, kind = "") {
   const id = Math.random();

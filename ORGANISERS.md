@@ -15,6 +15,41 @@ Never paste the token into a participant-facing screen or a shared chat.
 click **Authorize**, paste the token, then use any endpoint under `organisers` with
 "Try it out". The token stays in that tab until you close it or log out in the dialog.
 
+## Before the event: registration
+
+Teams sign themselves up at `/register`: a team name and 2–4 members, every address on
+`@thapar.edu`, each person in one team only. One email goes to all members with the team's
+shared access code. The code is never shown on screen, so a team that mistyped an address
+gets nothing: fix it with Remove + register again, or Resend after correcting it in the DB.
+
+Console → **Registration**: open/close sign-ups, change the team size or domain, see every
+team with its members and the outcome of its last email (`sent`, `failed` with the error on
+hover, `not_configured`), **Resend code** (new code, the old one stops working, laptops are
+logged out), **Remove** (only before the team has asked anything).
+
+Email needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` in the
+server's `deploy/.env` (and `PUBLIC_URL`, the link printed in the email). Without them
+teams still register; the console says email isn't set up, and Resend works once it is.
+
+| Sender | Limit | Setup |
+|---|---|---|
+| New Gmail account | 500 recipients a day | 2-step verification on, then an app password (16 letters, no spaces) |
+| Brevo free | 300 sends a day, counted per recipient | account must be approved for sending; SMTP key from the dashboard; verify the sender |
+
+Both count every recipient, not every email. 150 teams × 3–4 members is 450–600 recipients,
+so with Gmail keep registration open for at least two days (or in waves). Resends count too.
+If the limit is hit, emails show `failed`; Resend them the next day.
+
+```bash
+curl -s -H "$AUTH" -X PATCH $PX/config -H 'Content-Type: application/json' \
+  -d '{"registration": {"open": true, "min_members": 2, "max_members": 4}}'
+curl -s -H "$AUTH" $PX/registrations              # teams, members, last email
+curl -s -H "$AUTH" -X POST $PX/teams/T004/resend   # new code, emailed again
+curl -s -H "$AUTH" -X DELETE $PX/teams/T004        # remove a mistaken sign-up
+```
+
+Then deal companies (below) once registration closes.
+
 ## Before the event: teams
 
 ```bash
@@ -54,6 +89,28 @@ Keys are lowercase letters, digits and `_`. A round can't be deleted once it has
 or while the case unlocks evidence in it, or while documents/statuses point at it.
 Evidence the case unlocks "from" a round stays unlocked in every round after it, including
 rounds you add later.
+
+## Records tab
+
+Console → Documents → **Records tab**: Off / Titles / Full. It changes on every open portal
+at once.
+
+| Mode | Teams see | Citable? |
+|---|---|---|
+| Off (default) | nothing: records come out only in interviews | only what interviews showed |
+| Titles | a list of their company's documents: title, kind, date | no |
+| Full | their company's documents in full; after an alliance locks, the partner company's too | yes: every passage on the tab can be pinned and cited like interview evidence |
+
+Never on the tab, in any mode: "in confidence" records (kind `interview`: what a
+stakeholder admits only when trust is high) and deleted text (removed from a document;
+only people remember it). Judges' "clues found" still counts interview evidence only.
+
+Full makes interviews less necessary for anything the documents state outright; keep it
+for a round where you want that, or as a fallback if the interviews break.
+
+```bash
+curl -s -H "$AUTH" -X PATCH $PX/config -H 'Content-Type: application/json' -d '{"records_tab": {"mode": "titles"}}'
+```
 
 ## Documents
 

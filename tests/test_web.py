@@ -5,7 +5,12 @@ API = "/api/v1"
 
 async def test_portal_console_and_display_pages_are_served(seeded, make_client):
     client = make_client()
-    for path, script in (("/", "app.js"), ("/console", "console.js"), ("/display", "display.js")):
+    for path, script in (
+        ("/", "app.js"),
+        ("/console", "console.js"),
+        ("/display", "display.js"),
+        ("/register", "register.js"),
+    ):
         r = await client.get(path)
         assert r.status_code == 200 and f'src="{script}"' in r.text, path
         csp = r.headers["content-security-policy"]

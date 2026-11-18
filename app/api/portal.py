@@ -2,6 +2,7 @@
 
   GET /status     phase and time left, questions left per stakeholder, evidence count
   GET /evidence   every card this team has been shown, from any stakeholder
+  GET /records    the records tab: off, titles only, or the documents (organisers decide)
   GET /board      the team's evidence board
   PUT /board      save it (optimistic concurrency: send the version you edited)
   GET /brief          the case brief: the shared introduction and the team's company brief
@@ -33,15 +34,17 @@ from app.models import (
     Announcement,
     Company,
     Message,
+    Passage,
     Phase,
     Stakeholder,
     Team,
     TeamBoard,
     TeamDisclosure,
 )
-from app.portal.alliance import usable_passages
+from app.portal.alliance import partner_team_ids, usable_passages
 from app.portal.board import BoardIn, stored
 from app.portal.clock import interviews_open, not_in_round, phase_remaining, team_bonus
+from app.portal.records import tab_companies, tab_mode, tab_records_query
 
 router = APIRouter(tags=["portal"])
 
@@ -123,6 +126,64 @@ async def status(team: CurrentTeam, session: DbSession) -> StatusOut:
         evidence_count=count or 0,
         server_time=now,
     )
+
+
+class RecordPassageOut(BaseModel):
+    passage_id: str
+    text: str
+
+
+class RecordOut(BaseModel):
+    id: str
+    company_id: str
+    partner: bool  # a locked alliance partner's company, not the team's own
+    kind: str
+    title: str
+    date: str
+    passages: list[RecordPassageOut]  # empty in "titles" mode
+
+
+class RecordsOut(BaseModel):
+    mode: str  # off | titles | full
+    records: list[RecordOut]
+
+
+@router.get("/records", response_model=RecordsOut)
+async def records(team: CurrentTeam, session: DbSession, case: CaseDep) -> RecordsOut:
+    """The records tab. Empty when organisers have it off."""
+    _require_company(team)
+    mode = tab_mode((await current_event(session)).config)
+    if mode == "off":
+        return RecordsOut(mode=mode, records=[])
+    partners = await partner_team_ids(session, team.team_id) if mode == "full" else []
+    companies = await tab_companies(session, team.team_id, partners)
+    recs = (await session.scalars(tab_records_query(companies))).all()
+    by_record: dict[str, list[RecordPassageOut]] = {r.id: [] for r in recs}
+    if mode == "full" and recs:
+        rows = await session.scalars(
+            select(Passage).where(
+                Passage.record_id.in_(list(by_record)), Passage.deleted.is_(False)
+            )
+        )
+        order = {pid: i for i, pid in enumerate(case.passage)}  # as written in the case file
+        for p in sorted(rows, key=lambda p: (order.get(p.id, len(order)), p.id)):
+            text = render(case, p.id, Mode.quote) if p.id in case.passage else p.text
+            by_record[p.record_id].append(RecordPassageOut(passage_id=p.id, text=text))
+    out = []
+    for r in recs:
+        passages = by_record[r.id]
+        out.append(
+            RecordOut(
+                id=r.id,
+                company_id=r.company_id,
+                partner=r.company_id != team.company_id,
+                kind=r.kind,
+                title=r.title,
+                date=r.record_date.isoformat() if r.record_date else "",
+                passages=passages,
+            )
+        )
+    return RecordsOut(mode=mode, records=out)
 
 
 def evidence_items(case, rows) -> list[EvidenceItemOut]:

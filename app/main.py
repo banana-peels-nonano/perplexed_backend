@@ -20,6 +20,7 @@ from app.api import (
     interview,
     live,
     portal,
+    registration,
     rounds,
     stakeholders,
     submissions,
@@ -58,6 +59,8 @@ def create_app(provider: LlmProvider | None = None) -> FastAPI:
     app.include_router(alliances.admin, prefix=API_PREFIX)
     app.include_router(submissions.teams, prefix=API_PREFIX)
     app.include_router(submissions.admin, prefix=API_PREFIX)
+    app.include_router(registration.public, prefix=API_PREFIX)
+    app.include_router(registration.admin, prefix=API_PREFIX)
     app.include_router(live.router, prefix=API_PREFIX)
 
     @app.get("/healthz", tags=["ops"])
@@ -87,7 +90,8 @@ def mount_web(app: FastAPI) -> None:
     """The frontend is static files served by this same app: one origin, so the session
     cookie (SameSite=Strict, HttpOnly) just works and there's one thing to deploy.
     /         the team portal          /console  the organiser console
-    /display  the projector page       everything else under / is a static file"""
+    /display  the projector page       /register team sign-up (when organisers open it)
+    everything else under / is a static file"""
     if not WEB.is_dir():
         return
 
@@ -103,6 +107,10 @@ def mount_web(app: FastAPI) -> None:
     @app.get("/console", include_in_schema=False)
     async def console() -> FileResponse:
         return FileResponse(WEB / "console.html")
+
+    @app.get("/register", include_in_schema=False)
+    async def register_page() -> FileResponse:
+        return FileResponse(WEB / "register.html")
 
     @app.get("/display", include_in_schema=False)
     async def display() -> FileResponse:

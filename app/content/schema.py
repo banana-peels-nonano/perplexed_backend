@@ -11,7 +11,7 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Tier(IntEnum):
@@ -45,6 +45,30 @@ class Company(_Strict):
     brief: str = ""  # what this company's teams read before interviewing (markdown)
 
 
+class Look(_Strict):
+    """How a stakeholder's portrait is drawn (web/lib.js). Every field is optional; a
+    missing one is picked from the stakeholder's id, so the same person always looks the
+    same. Never sent to a model: it's art direction, not character."""
+
+    skin: Literal[1, 2, 3, 4, 5, 6] | None = None  # light to deep
+    hair: (
+        Literal[
+            "bald", "buzz", "short", "side_part", "quiff", "receding", "curly",
+            "bob", "long", "bun", "ponytail", "braid", "covered",
+        ]
+        | None
+    ) = None  # fmt: skip
+    hair_color: Literal["black", "dark_brown", "brown", "auburn", "blonde", "grey", "white"] | None = None
+    facial_hair: Literal["none", "stubble", "mustache", "beard", "goatee"] | None = None
+    glasses: Literal["none", "round", "square", "half"] | None = None
+    outfit: Literal["blazer", "suit_tie", "shirt", "sweater", "turtleneck", "hoodie", "kurta"] | None = None
+    outfit_color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    accessory: Literal["none", "earrings", "pearls", "headset", "bindi", "lanyard", "pen"] | None = None
+    age: Literal["young", "mid", "older"] | None = None
+    expression: Literal["calm", "smile", "smirk", "tired", "stern", "worried"] | None = None
+
+
 class Stakeholder(_Strict):
     company: str
     department: str
@@ -53,6 +77,7 @@ class Stakeholder(_Strict):
     canary: str
     persona: str
     beliefs: list[str] = []
+    look: Look | None = None
 
 
 class Record(_Strict):

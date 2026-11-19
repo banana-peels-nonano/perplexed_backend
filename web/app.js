@@ -4,7 +4,7 @@
 import { html, render, useEffect, useMemo, useRef, useState } from "./vendor/preact-htm.js";
 import {
   api, ApiError, connectLive, createStore, useStore, fmtClock, ago, useTick, uuid, bytes,
-  Markdown, Toasts, toast, Modal, Logo, Portrait, Glyph,
+  Markdown, Toasts, toast, Modal, Logo, Portrait, Glyph, nameColor,
 } from "./lib.js";
 import { Board } from "./board.js";
 import { AlliancePage, Sheet } from "./work.js";
@@ -108,6 +108,87 @@ function useClock() {
 }
 const lockLeft = (sh, statusAt) => Math.max(0, (sh.available_in_seconds || 0) - (Date.now() - statusAt) / 1000);
 
+// "Dr. Kavya Nair" -> "Kavya": skip titles when addressing someone by first name
+const firstName = (n) => n.split(/\s+/).find((w) => !/^(dr|mr|mrs|ms|prof|sri|shri|smt)\.?$/i.test(w)) || n;
+
+// ------------------------------------------------------------------ login art
+// Isometric pixel art: two company towers on one plinth, a "?" floating over the smaller one.
+// Built from unit cubes, drawn small, snapped to a fixed palette, outlined, then
+// scaled up by whole pixels in CSS (image-rendering: pixelated).
+const ISO_W = 176, ISO_H = 156, ISO_N = 4;
+const ISO_PAL = {
+  ink: "#0e0e0e", g1: "#262626", g2: "#4a4a4a", g3: "#6e6e6e", g4: "#8e8c88", g5: "#bdbab3", g6: "#d6d3cc", g7: "#e9e6df",
+  lav: "#8d84c6", lavL: "#bdb6ea", lavD: "#5e5690", win: "#1c1c1c",
+};
+const ISO_MAT = { // top, left (+y face), right (+x face)
+  ground: ["g7", "g5", "g4"], shadow: ["g5", "g5", "g4"], edge: ["g6", "g3", "g2"], path: ["g6", "g5", "g4"],
+  a: ["g5", "g3", "g2"], b: ["g6", "g4", "g3"], roof: ["g4", "g2", "g1"],
+  litL: ["g5", "lav", "lavD"], darkW: ["g5", "win", "win"], q: ["lavL", "lav", "lavD"], shrub: ["g2", "g1", "ink"],
+};
+const ISO_Q = [".###.", "#...#", "....#", "...#.", "..#..", ".....", "..#.."];
+function isoVoxels(t) {
+  const v = [];
+  const put = (x, y, z, m) => v.push([x, y, z, m]);
+  for (let x = 0; x < 18; x++) for (let y = 0; y < 13; y++) {
+    put(x, y, 0, "edge");
+    put(x, y, 1, (y === 8 || x === 8) && x > 6 && y > 0 ? "path" : "ground");
+  }
+  const lit = (x, y, z, face) => (Math.sin(x * 12.9 + y * 78.2 + z * 37.7 + Math.floor(t / 9) * (face === "a" ? 1 : 0.7)) > 0.15);
+  const tower = (x0, y0, w, d, h, m) => {
+    for (let z = 2; z < 2 + h; z++) for (let x = x0; x < x0 + w; x++) for (let y = y0; y < y0 + d; y++) {
+      const front = x === x0 + w - 1 || y === y0 + d - 1, row = (z - 2) % 3 === 1 && z < 1 + h;
+      const col = x === x0 + w - 1 ? (y - y0) % 2 === 1 : (x - x0) % 2 === 1;
+      put(x, y, z, front && row && col ? (lit(x, y, z, m) ? "litL" : "darkW") : m);
+    }
+    for (let x = x0; x < x0 + w; x++) for (let y = y0; y < y0 + d; y++) if (x === x0 || y === y0 || x === x0 + w - 1 || y === y0 + d - 1) put(x, y, 2 + h, "roof");
+  };
+  tower(1, 1, 5, 5, 14, "a");
+  put(3, 3, 17, "roof"); put(3, 3, 18, "roof"); put(3, 3, 19, "q");
+  tower(11, 3, 5, 4, 9, "b");
+  put(12, 4, 12, "roof"); put(15, 6, 12, "roof");
+  for (const [x, y] of [[7, 11], [16, 10], [16, 1], [7, 1]]) { put(x, y, 2, "shrub"); }
+  // the "?": a slab in the x-z plane, bobbing
+  const bob = Math.round(Math.sin(t / 5) * 2) / 4;
+  ISO_Q.forEach((row, i) => [...row].forEach((ch, j) => { if (ch === "#") put(11 + j, 5, 22 - i + bob, "q"); }));
+  return v;
+}
+function drawIso(canvas, t) {
+  const W = ISO_W, H = ISO_H, n = ISO_N;
+  canvas.width = W; canvas.height = H;
+  const g = canvas.getContext("2d", { willReadFrequently: true });
+  const ox = 80, oy = 82;
+  const P = (x, y, z) => [ox + (x - y) * n, oy + (x + y) * n / 2 - z * n];
+  const vox = isoVoxels(t).sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[2] - b[2]);
+  const poly = (pts, col) => { g.fillStyle = ISO_PAL[col]; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill(); };
+  for (const [x, y, z, m] of vox) {
+    const [top, left, right] = ISO_MAT[m];
+    poly([P(x, y + 1, z), P(x + 1, y + 1, z), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], left);
+    poly([P(x + 1, y, z), P(x + 1, y + 1, z), P(x + 1, y + 1, z + 1), P(x + 1, y, z + 1)], right);
+    poly([P(x, y, z + 1), P(x + 1, y, z + 1), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], top);
+  }
+  // snap every pixel to the palette, then outline the silhouette
+  const img = g.getImageData(0, 0, W, H), d = img.data;
+  const pal = Object.values(ISO_PAL).map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+  const solid = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const a = d[i * 4 + 3];
+    if (a < 110) { d[i * 4 + 3] = 0; continue; }
+    const r = d[i * 4] * 255 / a, gg = d[i * 4 + 1] * 255 / a, b = d[i * 4 + 2] * 255 / a;
+    let best = 0, bd = 1e9;
+    pal.forEach(([pr, pg, pb], k) => { const e = (pr - r) ** 2 + (pg - gg) ** 2 + (pb - b) ** 2; if (e < bd) { bd = e; best = k; } });
+    [d[i * 4], d[i * 4 + 1], d[i * 4 + 2], d[i * 4 + 3]] = [...pal[best], 255];
+    solid[i] = 1;
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (solid[i]) continue;
+    if ((x > 0 && solid[i - 1]) || (x < W - 1 && solid[i + 1]) || (y > 0 && solid[i - W]) || (y < H - 1 && solid[i + W])) {
+      d[i * 4] = 14; d[i * 4 + 1] = 14; d[i * 4 + 2] = 14; d[i * 4 + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+
 // ------------------------------------------------------------------ login
 function Login() {
   const [code, setCode] = useState("");
@@ -115,32 +196,18 @@ function Login() {
   const [busy, setBusy] = useState(false);
   const art = useRef();
   useEffect(() => {
-    // the big scanline "?" on the login screen
-    const c = art.current, ctx = c.getContext("2d");
-    c.width = 420; c.height = 420;
-    const m = document.createElement("canvas"); m.width = 420; m.height = 420;
-    const g = m.getContext("2d", { willReadFrequently: true });
-    g.font = "300px 'Press Start 2P', monospace"; g.textAlign = "center"; g.textBaseline = "middle";
-    let t = 0, raf;
-    const drawMask = () => { g.clearRect(0, 0, 420, 420); g.fillText("?", 210, 230); };
-    document.fonts.ready.then(drawMask); drawMask();
-    const loop = () => {
-      t += 1;
-      const d = g.getImageData(0, 0, 420, 420).data;
-      ctx.clearRect(0, 0, 420, 420); ctx.fillStyle = "#0e0e0e";
-      for (let y = 0; y < 420; y += 4) {
-        const sh = Math.sin((y + t * 2) * .05) > .97 ? (Math.random() - .5) * 30 : 0;
-        let run = -1;
-        for (let x = 0; x <= 420; x++) {
-          const on = x < 420 && d[(y * 420 + x) * 4 + 3] > 100;
-          if (on && run < 0) run = x;
-          if (!on && run >= 0) { ctx.fillRect(run + sh, y, x - run, 2); run = -1; }
-        }
-      }
-      raf = setTimeout(() => requestAnimationFrame(loop), 70);
+    const c = art.current;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const fit = () => { // whole-pixel scaling keeps the pixels square
+      const panel = c.parentElement.getBoundingClientRect();
+      const k = Math.max(1, Math.floor(Math.min((innerHeight - 450) / ISO_H, (panel.width * 0.62) / ISO_W)));
+      c.style.width = `${ISO_W * k}px`; c.style.height = `${ISO_H * k}px`;
     };
+    fit(); addEventListener("resize", fit);
+    let t = 0, timer;
+    const loop = () => { drawIso(c, t++); if (!reduce) timer = setTimeout(loop, 125); };
     loop();
-    return () => clearTimeout(raf);
+    return () => { clearTimeout(timer); removeEventListener("resize", fit); };
   }, []);
   const submit = async (e) => {
     e.preventDefault();
@@ -224,10 +291,10 @@ function Badge({ sh, i = 0 }) {
         <div class="badge-face">
           <div class="badge-top"><span>${pretty(sh.department)}</span><span>EMP-${empNo(sh.id)}</span></div>
           <div style="position:relative">
-            <${Portrait} id=${sh.id} name=${sh.name} animate=${true} />
+            <${Portrait} id=${sh.id} name=${sh.name} look=${sh.look} />
             ${locked > 0 && html`<div class="stamp">AT HR<br/>${fmtClock(locked)}</div>`}
           </div>
-          <div class="badge-name">${sh.name}</div>
+          <div class="badge-name" style=${`color:${nameColor(sh.look, sh.id)}`}>${sh.name}</div>
           <div class="badge-role">${sh.role}</div>
           <div class="badge-foot">
             <span>${sh.questions_remaining} left</span>
@@ -375,7 +442,7 @@ function Room({ sid }) {
   return html`<div class=${"room" + (s.announcements[0] ? " has-ticker" : "")}>
     <aside class="room-side">
       <a href="#/people" class="small">← All people</a>
-      <${Portrait} id=${sh.id} name=${sh.name} />
+      <${Portrait} id=${sh.id} name=${sh.name} look=${sh.look} />
       <div><div class="badge-name" style="margin:0">${sh.name}</div><div class="badge-role">${sh.role}</div></div>
       <dl class="small" style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0">
         <dt class="muted">Dept</dt><dd style="margin:0">${pretty(sh.department)}</dd>
@@ -393,13 +460,13 @@ function Room({ sid }) {
           ? html`<div class="msg n" key=${m.id}><div class="who">HR notice</div><div class="bubble">${m.text}</div></div>`
           : html`<div class="msg a" key=${m.id}><div class="who">${sh.name}</div><div class="bubble" data-answer=${m.id}>${m.text}</div>
               ${m.evidence?.length ? html`<div class="cites">${m.evidence.map((c) => html`<span class=${"chip" + (s.fresh.has(c.passage_id) ? " holo" : "")}>${c.record_id}</span>`)}</div>` : null}</div>`)}
-        ${thinking && html`<div class="thinking"><span class="bars"><i></i><i></i><i></i></span>${sh.name.split(" ")[0]} is thinking…</div>`}
+        ${thinking && html`<div class="thinking"><span class="bars"><i></i><i></i><i></i></span>${firstName(sh.name)} is thinking…</div>`}
       </div>
       <div class="composer">
         ${!open ? html`<div class="closed-note">Interviews are closed in this round.</div>`
           : locked ? html`<div class="closed-note">${pretty(sh.department)} has filed an HR complaint. Back in ${fmtClock(locked)}.</div>`
           : sh.questions_remaining <= 0 ? html`<div class="closed-note">You've used every question for ${sh.name}.</div>`
-          : html`<textarea class="textarea" maxlength="1000" rows="2" placeholder=${`Ask ${sh.name.split(" ")[0]} something…`}
+          : html`<textarea class="textarea" maxlength="1000" rows="2" placeholder=${`Ask ${firstName(sh.name)} something…`}
               value=${text} onInput=${(e) => setText(e.target.value)} disabled=${thinking}
               onKeyDown=${(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }}></textarea>
             <div class="meta"><span>${sh.questions_remaining} question${sh.questions_remaining === 1 ? "" : "s"} left · Enter to send, Shift+Enter for a new line</span>
@@ -407,10 +474,10 @@ function Room({ sid }) {
       </div>
     </section>
     <aside class="room-evidence">
-      <div class="kicker">Evidence from ${sh.name.split(" ")[0]}</div>
+      <div class="kicker">Evidence from ${firstName(sh.name)}</div>
       ${myCards.length ? myCards.map((c) => html`<${EvidenceCard} key=${c.passage_id} c=${c} isNew=${s.fresh.has(c.passage_id)}
           pin=${() => pinToBoard({ kind: "evidence", passage_id: c.passage_id })} />`)
-        : html`<div class="empty small">Nothing yet. Records only appear when ${sh.name.split(" ")[0]} decides to share them.</div>`}
+        : html`<div class="empty small">Nothing yet. Records only appear when ${firstName(sh.name)} decides to share them.</div>`}
     </aside>
     ${sel && html`<button class="btn small pinbtn" style=${`left:${sel.x - 50}px;top:${Math.max(70, sel.y)}px`}
       onMouseDown=${(e) => e.preventDefault()}

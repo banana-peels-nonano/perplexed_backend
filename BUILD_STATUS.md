@@ -61,7 +61,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 |---|---|---|
 | Development environment | Done | Docker, Postgres 17, venv, test database |
 | FastAPI foundation | Done | settings, error envelope, health check |
-| Database schema and migrations | Done | migrations 0001–0009 |
+| Database schema and migrations | Done | migrations 0001–0010 |
 | Case format, loader, seed | Done | validated TOML; placeholder case only |
 | Authentication and teams | Done | access codes, sessions, team context |
 | Interview flow | Done | quota, idempotency, one question in flight, refund on failure, memory |
@@ -79,13 +79,14 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 | Real case conversion | Done (draft) | both cases from the 15 Nov design doc converted (kept in `content/`, never committed) |
 | Alliances | Done | cross-company requests, mutual lock, organiser pairing (incl. three teams), partner evidence after the lock |
 | Submissions | Done | Audit Findings Sheet: every version kept, server-side deadline, citations incl. partner evidence, cross-company rule |
+| Portraits and login art | Done | flat colour-block stakeholder portraits from each `look` in the case file (fallback from the id); isometric pixel-art login scene in place of the scanline "?" |
 | Records tab | Done | organisers switch it live: off (default), titles only, or full documents (then citable; partner company's after an alliance locks); "in confidence" records and deleted text never shown |
 | Team self-registration | Done | `/register`: team name + 2–4 members with @thapar.edu addresses; one email with the shared access code to every member (SMTP: Gmail app password or Brevo); console tab to open/close, resend, remove |
 | Judging | Pending | judges read sheets in the console; scoring form not built |
 | Frontend | Done (first version) | `web/`: team portal, organiser console, projector page; served by the backend |
 | Staging and production deployment | Ready to run | Dockerfile, `deploy/` (compose, Caddy, nginx variant, 5-minute backups, setup script), `render.yaml` for free staging; waiting on SSH + DNS |
 
-Tests: 182 passing (`python -m pytest -q`).
+Tests: 185 passing (`python -m pytest -q`).
 
 ## 6. Measured so far (placeholder case)
 

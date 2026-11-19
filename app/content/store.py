@@ -81,6 +81,7 @@ async def load_case_from_db(session: AsyncSession) -> Case:
                 "canary": s.canary,
                 "persona": s.persona,
                 "beliefs": s.beliefs,
+                "look": s.look or None,
             }
             for s in await session.scalars(
                 select(Stakeholder)

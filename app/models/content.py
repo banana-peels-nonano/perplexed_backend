@@ -24,7 +24,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     text as sql_text,  # 'text' is also a column name below
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -77,6 +77,8 @@ class Stakeholder(Base):
     persona: Mapped[str] = mapped_column(Text)
     beliefs: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=sql_text("'{}'"))
     canary: Mapped[str] = mapped_column(Text)
+    # portrait art direction (content.schema.Look); never sent to a model
+    look: Mapped[dict] = mapped_column(JSONB, server_default=sql_text("'{}'::jsonb"))
     # 3-5 per company, configurable; a hidden stakeholder can start inactive
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=sql_text("true"))
     sort_order: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))

@@ -29,6 +29,8 @@ class StakeholderOut(BaseModel):
     # seconds until their department talks to the team again after an HR complaint
     # (0 = available); the same for everyone in the department
     available_in_seconds: int = 0
+    # how the portrait is drawn; empty = picked from the id (content.schema.Look)
+    look: dict = {}
 
 
 def _query(team: TeamContext):
@@ -76,6 +78,7 @@ def _out(
         department=s.department,
         questions_remaining=remaining,
         available_in_seconds=locked,
+        look=s.look or {},
     )
 
 

@@ -115,6 +115,12 @@ stakeholders (persona, beliefs), records split into passages (topics, protected
 phrases, optional authored paraphrase), per-stakeholder access by trust tier with
 unlock rules, a shared brief and one brief per company, and the judges' clue list. The loader rejects inconsistent cases and names the problem.
 
+Each stakeholder may also have a `[stakeholder.<id>.look]` table describing their portrait:
+`skin` (1–6), `hair`, `hair_color`, `facial_hair`, `glasses`, `outfit`, `outfit_color`,
+`background` (`#rrggbb`), `accessory`, `age`, `expression`. The allowed values are in
+`app/content/schema.py` (`Look`). Anything left out is picked from the stakeholder's id.
+It is art direction only: never part of any prompt.
+
 `tests/fixtures/northfield.toml` is a **placeholder** case for development and
 tests. The real case is never committed: keep it under `content/`, which is
 git-ignored.

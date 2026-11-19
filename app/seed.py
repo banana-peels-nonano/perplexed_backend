@@ -129,6 +129,7 @@ async def seed_case(session: AsyncSession, case: Case) -> None:
                 "persona": s.persona,
                 "beliefs": s.beliefs,
                 "canary": s.canary,
+                "look": s.look.model_dump(exclude_none=True) if s.look else {},
                 "sort_order": i,
             }
             for i, (sid, s) in enumerate(case.stakeholder.items())

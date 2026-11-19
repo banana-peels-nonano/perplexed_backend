@@ -52,6 +52,16 @@ beliefs = [
   "Operations has never told you the QA changes caused a capacity problem.",
 ]
 
+[stakeholder.cfo.look]  # portrait art direction; the other stakeholders are drawn from their ids
+skin = 2
+hair = "bob"
+hair_color = "dark_brown"
+glasses = "half"
+outfit = "blazer"
+outfit_color = "#22324A"
+background = "#B23A5C"
+expression = "stern"
+
 [stakeholder.ops_head]
 company = "A"
 department = "operations"

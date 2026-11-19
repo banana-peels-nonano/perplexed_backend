@@ -26,3 +26,17 @@ async def test_the_api_is_not_shadowed_by_the_static_files(seeded, make_client):
     assert r.status_code == 401 and r.json()["error"]["code"] == "UNAUTHENTICATED"
     assert "content-security-policy" not in r.headers  # API responses keep their own headers
     assert (await client.get("/healthz")).json() == {"status": "ok"}
+
+
+def test_badges_keep_3d_flips_working_in_firefox():
+    """mix-blend-mode/filter/isolation inside a badge make Firefox flatten the flip and show
+    a face back to front (19 Nov). Keep them out of badge and portrait rules."""
+    import re
+    from pathlib import Path
+
+    css = Path("web/style.css").read_text()
+    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        if "badge" in selector or "portrait" in selector:
+            assert not re.search(r"mix-blend-mode|(?<![-\w])filter\s*:|isolation\s*:", body), (
+                selector
+            )

@@ -112,59 +112,102 @@ const lockLeft = (sh, statusAt) => Math.max(0, (sh.available_in_seconds || 0) - 
 const firstName = (n) => n.split(/\s+/).find((w) => !/^(dr|mr|mrs|ms|prof|sri|shri|smt)\.?$/i.test(w)) || n;
 
 // ------------------------------------------------------------------ login art
-// Isometric pixel art: two company towers on one plinth, a "?" floating over the smaller one.
-// Built from unit cubes, drawn small, snapped to a fixed palette, outlined, then
-// scaled up by whole pixels in CSS (image-rendering: pixelated).
-const ISO_W = 176, ISO_H = 156, ISO_N = 4;
+// Isometric pixel art: a small New York. Built from unit cubes, hidden faces skipped,
+// snapped to a fixed palette, outlined, then scaled up by whole pixels in CSS
+// (image-rendering: pixelated). It rises from the bottom edge of the panel like a horizon.
+const ISO_N = 4;
 const ISO_PAL = {
   ink: "#0e0e0e", g1: "#262626", g2: "#4a4a4a", g3: "#6e6e6e", g4: "#8e8c88", g5: "#bdbab3", g6: "#d6d3cc", g7: "#e9e6df",
-  lav: "#8d84c6", lavL: "#bdb6ea", lavD: "#5e5690", win: "#1c1c1c",
+  lav: "#8d84c6", lavL: "#bdb6ea", lavD: "#5e5690", win: "#1c1c1c", rust: "#7a5a46", rustD: "#56402f",
 };
 const ISO_MAT = { // top, left (+y face), right (+x face)
-  ground: ["g7", "g5", "g4"], shadow: ["g5", "g5", "g4"], edge: ["g6", "g3", "g2"], path: ["g6", "g5", "g4"],
-  a: ["g5", "g3", "g2"], b: ["g6", "g4", "g3"], roof: ["g4", "g2", "g1"],
-  litL: ["g5", "lav", "lavD"], darkW: ["g5", "win", "win"], q: ["lavL", "lav", "lavD"], shrub: ["g2", "g1", "ink"],
+  ground: ["g7", "g5", "g4"], edge: ["g6", "g3", "g2"],
+  water: ["lavD", "g2", "g1"], wave: ["lav", "g2", "g1"], pier: ["g4", "g2", "g1"],
+  a: ["g5", "g3", "g2"], b: ["g6", "g4", "g3"], c: ["g4", "g2", "g1"], stone: ["g7", "g5", "g4"],
+  brown: ["g3", "rust", "rustD"], tank: ["rust", "rust", "rustD"],
+  glass: ["g6", "lav", "lavD"], mull: ["g5", "g3", "g2"], roof: ["g4", "g2", "g1"],
+  lit: ["g5", "lavL", "lav"], dark: ["g5", "win", "win"], q: ["lavL", "lav", "lavD"], tree: ["g2", "g1", "ink"],
 };
 const ISO_Q = [".###.", "#...#", "....#", "...#.", "..#..", ".....", "..#.."];
-function isoVoxels(t) {
+const ihash = (x, y, z) => { let h = (x * 374761393 + y * 668265263 + z * 1442695041) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+
+function cityKit(t) {
   const v = [];
   const put = (x, y, z, m) => v.push([x, y, z, m]);
-  for (let x = 0; x < 18; x++) for (let y = 0; y < 13; y++) {
-    put(x, y, 0, "edge");
-    put(x, y, 1, (y === 8 || x === 8) && x > 6 && y > 0 ? "path" : "ground");
-  }
-  const lit = (x, y, z, face) => (Math.sin(x * 12.9 + y * 78.2 + z * 37.7 + Math.floor(t / 9) * (face === "a" ? 1 : 0.7)) > 0.15);
-  const tower = (x0, y0, w, d, h, m) => {
-    for (let z = 2; z < 2 + h; z++) for (let x = x0; x < x0 + w; x++) for (let y = y0; y < y0 + d; y++) {
-      const front = x === x0 + w - 1 || y === y0 + d - 1, row = (z - 2) % 3 === 1 && z < 1 + h;
-      const col = x === x0 + w - 1 ? (y - y0) % 2 === 1 : (x - x0) % 2 === 1;
-      put(x, y, z, front && row && col ? (lit(x, y, z, m) ? "litL" : "darkW") : m);
+  const lit = (x, y, z) => ihash(x, y, z + 7 * Math.floor((t + ihash(x, z, y) * 60) / 60)) > 0.45;
+  // a building: per-voxel material from a facade rule; keep() carves the footprint
+  const block = (x0, y0, w, d, z0, z1, m, win = "grid", keep = () => true) => {
+    for (let z = z0; z < z1; z++) for (let x = x0; x < x0 + w; x++) for (let y = y0; y < y0 + d; y++) {
+      if (!keep(x - x0, y - y0, z)) continue;
+      const fx = x === x0 + w - 1 || !keep(x - x0 + 1, y - y0, z), fy = y === y0 + d - 1 || !keep(x - x0, y - y0 + 1, z);
+      let mat = m;
+      if ((fx || fy) && z < z1 - 1) {
+        const k = fy ? x - x0 : y - y0;
+        if (win === "glass") mat = z % 3 === 0 ? "mull" : "glass";
+        else if (win === "grid" ? z % 2 === 1 && k % 2 === 1 : win === "cols" ? k % 2 === 1 && z % 4 !== 0 : win === "bands" ? z % 2 === 1 : false) mat = lit(x, y, z) ? "lit" : "dark";
+      }
+      put(x, y, z, mat);
     }
-    for (let x = x0; x < x0 + w; x++) for (let y = y0; y < y0 + d; y++) if (x === x0 || y === y0 || x === x0 + w - 1 || y === y0 + d - 1) put(x, y, 2 + h, "roof");
   };
-  tower(1, 1, 5, 5, 14, "a");
-  put(3, 3, 17, "roof"); put(3, 3, 18, "roof"); put(3, 3, 19, "q");
-  tower(11, 3, 5, 4, 9, "b");
-  put(12, 4, 12, "roof"); put(15, 6, 12, "roof");
-  for (const [x, y] of [[7, 11], [16, 10], [16, 1], [7, 1]]) { put(x, y, 2, "shrub"); }
-  // the "?": a slab in the x-z plane, bobbing
-  const bob = Math.round(Math.sin(t / 5) * 2) / 4;
-  ISO_Q.forEach((row, i) => [...row].forEach((ch, j) => { if (ch === "#") put(11 + j, 5, 22 - i + bob, "q"); }));
-  return v;
+  const land = (x, y) => { put(x, y, 0, "edge"); put(x, y, 1, "ground"); };
+  const water = (x, y) => put(x, y, 0, ihash(x, y, Math.floor(t / 4)) > 0.9 ? "wave" : "water");
+  const pole = (x, y, z0, z1) => { for (let z = z0; z < z1; z++) put(x, y, z, z === z1 - 1 ? "q" : "roof"); };
+  // the landmarks, each from its lot's back corner (x0, y0)
+  const taper = (x0, y0) => { [6, 6, 5, 5, 4, 4, 3, 2].forEach((sz, i) => { const o = Math.floor((6 - sz) / 2); block(x0 + o, y0 + o, sz, sz, 2 + i * 3, 5 + i * 3, "glass", "glass"); }); pole(x0 + 2, y0 + 2, 26, 30); };
+  const setback = (x0, y0) => { block(x0, y0, 5, 5, 2, 13, "a", "cols"); block(x0 + 1, y0 + 1, 3, 3, 13, 20, "a", "cols"); pole(x0 + 2, y0 + 2, 20, 25); };
+  const crown = (x0, y0) => {
+    block(x0, y0, 5, 5, 2, 16, "b", "cols");
+    block(x0 + 1, y0 + 1, 3, 3, 16, 19, "stone", "none", (dx, dy, z) => z < 18 || dx === 1 || dy === 1);
+    const blink = Math.floor(t / 6) % 2;
+    for (let z = 16; z < 19; z++) { put(x0 + 3, y0 + 2, z, (z + blink) % 2 ? "lit" : "stone"); put(x0 + 2, y0 + 3, z, (z + blink) % 2 ? "stone" : "lit"); }
+    for (let z = 19; z < 24; z++) put(x0 + 2, y0 + 2, z, "stone");
+  };
+  const wedge = (x0, y0) => block(x0, y0, 4, 4, 2, 11, "stone", "grid", (dx, dy) => dx >= dy - 1 && dx < 4 && dy < 4);
+  const tank = (x0, y0, w = 3, d = 3, h = 8) => { block(x0, y0, w, d, 2, h, "b", "grid"); for (const [x, y] of [[x0, y0], [x0 + 1, y0], [x0, y0 + 1], [x0 + 1, y0 + 1]]) { put(x, y, h, "roof"); put(x, y, h + 1, "tank"); put(x, y, h + 2, "tank"); } };
+  const slab = (x0, y0, w, d, h) => block(x0, y0, w, d, 2, h, "c", "bands");
+  const brownstones = (x0, y0, n, alongY) => { for (let i = 0; i < n; i++) alongY ? block(x0, y0 + i * 2, 3, 2, 2, 5 + (i % 2), "brown", "grid") : block(x0 + i * 2, y0, 2, 3, 2, 5 + (i % 2), "brown", "grid"); };
+  const question = (x0, y0, ztop) => { const bob = Math.round(Math.sin(t / 5) * 2) / 4; ISO_Q.forEach((row, i) => [...row].forEach((ch, j) => { if (ch === "#") put(x0 + j, y0, ztop - i + bob, "q"); })); };
+  return { v, put, land, water, taper, setback, crown, wedge, tank, slab, brownstones, question };
+}
+
+// two waterfronts meeting at the tallest tower; the skyline steps down both ways
+function city(t) {
+    const k = cityKit(t);
+    for (let x = 0; x < 30; x++) for (let y = 0; y < 30; y++) {
+      if (y < 7 || x < 7) k.land(x, y); else if (y < 10 || x < 10) k.water(x, y);
+    }
+    k.taper(0, 0);
+    k.setback(8, 1); k.crown(14, 1); k.wedge(20, 2); k.brownstones(24, 2, 3, false);
+    k.slab(1, 8, 5, 4, 17); k.tank(2, 14, 3, 3, 12); k.slab(2, 19, 4, 3, 9); k.brownstones(2, 23, 3, true);
+    for (let i = 8; i < 30; i++) { if (ihash(i, 6, 3) > 0.55) k.put(i, 6, 2, "tree"); if (ihash(6, i, 3) > 0.55) k.put(6, i, 2, "tree"); }
+    k.question(22, 1, 22);
+    return k.v;
+}
+
+function isoBounds(vox) { // the drawing's extent in pixels, so any layout fits its canvas
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const [x, y, z] of vox) {
+    x0 = Math.min(x0, (x - y - 1) * ISO_N); x1 = Math.max(x1, (x - y + 1) * ISO_N);
+    y0 = Math.min(y0, (x + y) * ISO_N / 2 - (z + 2) * ISO_N); y1 = Math.max(y1, (x + y + 2) * ISO_N / 2 - z * ISO_N);
+  }
+  return { W: Math.ceil(x1 - x0) + 4, H: Math.ceil(y1 - y0) + 4, ox: -x0 + 2, oy: -y0 + 2 };
 }
 function drawIso(canvas, t) {
-  const W = ISO_W, H = ISO_H, n = ISO_N;
+  const vox = city(t);
+  canvas._b = canvas._b || isoBounds(city(0));
+  const { W, H, ox, oy } = canvas._b, n = ISO_N;
   canvas.width = W; canvas.height = H;
   const g = canvas.getContext("2d", { willReadFrequently: true });
-  const ox = 80, oy = 82;
   const P = (x, y, z) => [ox + (x - y) * n, oy + (x + y) * n / 2 - z * n];
-  const vox = isoVoxels(t).sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[2] - b[2]);
+  const filled = new Set(vox.filter((v) => Number.isInteger(v[2])).map(([x, y, z]) => `${x},${y},${z}`));
+  vox.sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[2] - b[2]);
   const poly = (pts, col) => { g.fillStyle = ISO_PAL[col]; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill(); };
   for (const [x, y, z, m] of vox) {
     const [top, left, right] = ISO_MAT[m];
-    poly([P(x, y + 1, z), P(x + 1, y + 1, z), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], left);
-    poly([P(x + 1, y, z), P(x + 1, y + 1, z), P(x + 1, y + 1, z + 1), P(x + 1, y, z + 1)], right);
-    poly([P(x, y, z + 1), P(x + 1, y, z + 1), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], top);
+    const has = (a, b, c) => filled.has(`${a},${b},${c}`);
+    if (!has(x, y + 1, z)) poly([P(x, y + 1, z), P(x + 1, y + 1, z), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], left);
+    if (!has(x + 1, y, z)) poly([P(x + 1, y, z), P(x + 1, y + 1, z), P(x + 1, y + 1, z + 1), P(x + 1, y, z + 1)], right);
+    if (!has(x, y, z + 1)) poly([P(x, y, z + 1), P(x + 1, y, z + 1), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], top);
   }
   // snap every pixel to the palette, then outline the silhouette
   const img = g.getImageData(0, 0, W, H), d = img.data;
@@ -198,10 +241,20 @@ function Login() {
   useEffect(() => {
     const c = art.current;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const fit = () => { // whole-pixel scaling keeps the pixels square
+    drawIso(c, 0);
+    const { W, H } = c._b;
+    const fit = () => { // whole pixels keep the pixels square; never grow into the text
       const panel = c.parentElement.getBoundingClientRect();
-      const k = Math.max(1, Math.floor(Math.min((innerHeight - 450) / ISO_H, (panel.width * 0.62) / ISO_W)));
-      c.style.width = `${ISO_W * k}px`; c.style.height = `${ISO_H * k}px`;
+      const text = c.parentElement.querySelector(".login-copy").getBoundingClientRect();
+      const narrow = matchMedia("(max-width: 860px)").matches; // stacked: the art sits in the flow
+      // like a horizon, the island may sink below the bottom edge, up to about a third of its height,
+      // so a short screen still gets a big skyline without it reaching the text
+      const room = panel.bottom - text.bottom - 28;
+      let k = Math.max(1, Math.floor(narrow ? (panel.width * 0.9) / W : (panel.width * 1.1) / W)), sink = 0;
+      if (!narrow) for (; k > 1; k--) { sink = Math.max(0, H * k - room); if (sink <= H * k * 0.36) break; }
+      if (!narrow) sink = Math.max(k === 1 ? Math.max(0, H - room) : sink, H * k * 0.04);
+      c.style.bottom = narrow ? "" : `${-Math.round(sink)}px`;
+      c.style.width = `${W * k}px`; c.style.height = `${H * k}px`;
     };
     fit(); addEventListener("resize", fit);
     let t = 0, timer;
@@ -223,7 +276,7 @@ function Login() {
   return html`<div class="login">
     <section class="login-art">
       <${Logo} />
-      <div>
+      <div class="login-copy">
         <div class="kicker">AI consulting simulation</div>
         <h1 class="hero-title px" style="margin-top:18px">PERPLEXED<br/>2.0</h1>
         <p class="muted" style="margin-top:22px">Two companies. A handful of people who know more than they say. Ask well, earn their trust, and build the case from what they let slip.</p>

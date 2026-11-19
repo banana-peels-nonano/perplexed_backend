@@ -141,14 +141,17 @@ label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; 
 /* ---------- login ---------- */
 .login { min-height: 100vh; display: grid; grid-template-columns: 1.15fr 1fr; }
 .login-art { position: relative; padding: 48px; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; overflow: hidden; border-right: 1px solid var(--line); }
-.login-art canvas { align-self: flex-end; image-rendering: pixelated; image-rendering: crisp-edges; margin: 8px -8px 0 0; }
+.login-art { justify-content: flex-start; gap: 28px; }
+.login-art .login-copy { margin-top: clamp(16px, 9vh, 120px); }
+.login-art canvas { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); image-rendering: pixelated; image-rendering: crisp-edges; pointer-events: none; }
+.login-art > .small { position: absolute; left: 42px; bottom: 40px; z-index: 1; background: var(--paper); padding: 2px 6px; }
 .login-art .hero-title { font-size: clamp(34px, 5vw, 70px); position: relative; z-index: 1; }
 .login-art p { max-width: 420px; position: relative; z-index: 1; }
 .login-form { display: flex; align-items: center; justify-content: center; padding: 48px; }
 .login-form form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 16px; }
 .code-input { font-family: var(--mono); font-weight: 500; font-size: 22px; letter-spacing: .14em; text-align: center; padding: 14px; text-transform: uppercase; }
 .error { color: #a3261b; font-size: 13px; }
-@media (max-width: 860px) { .login { grid-template-columns: 1fr; } .login-art { min-height: 340px; border-right: 0; border-bottom: 1px solid var(--line); } }
+@media (max-width: 860px) { .login { grid-template-columns: 1fr; } .login-art { min-height: 340px; border-right: 0; border-bottom: 1px solid var(--line); } .login-art canvas, .login-art > .small { position: static; transform: none; align-self: center; } .login-art > .small { align-self: flex-start; } }
 
 /* ---------- people: badges on a wire ---------- */
 .people-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 26px; }

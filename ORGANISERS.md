@@ -31,10 +31,10 @@ Email needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` 
 server's `deploy/.env` (and `PUBLIC_URL`, the link printed in the email). Without them
 teams still register; the console says email isn't set up, and Resend works once it is.
 
-| Sender | Limit | Setup |
-|---|---|---|
-| New Gmail account | 500 recipients a day | 2-step verification on, then an app password (16 letters, no spaces) |
-| Brevo free | 300 sends a day, counted per recipient | account must be approved for sending; SMTP key from the dashboard; verify the sender |
+| Sender            | Limit                                  | Setup                                                                                |
+| ----------------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
+| New Gmail account | 500 recipients a day                   | 2-step verification on, then an app password (16 letters, no spaces)                 |
+| Brevo free        | 300 sends a day, counted per recipient | account must be approved for sending; SMTP key from the dashboard; verify the sender |
 
 Both count every recipient, not every email. 150 teams × 3–4 members is 450–600 recipients,
 so with Gmail keep registration open for at least two days (or in waves). Resends count too.
@@ -95,11 +95,11 @@ rounds you add later.
 Console → Documents → **Records tab**: Off / Titles / Full. It changes on every open portal
 at once.
 
-| Mode | Teams see | Citable? |
-|---|---|---|
-| Off (default) | nothing: records come out only in interviews | only what interviews showed |
-| Titles | a list of their company's documents: title, kind, date | no |
-| Full | their company's documents in full; after an alliance locks, the partner company's too | yes: every passage on the tab can be pinned and cited like interview evidence |
+| Mode          | Teams see                                                                             | Citable?                                                                      |
+| ------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Off (default) | nothing: records come out only in interviews                                          | only what interviews showed                                                   |
+| Titles        | a list of their company's documents: title, kind, date                                | no                                                                            |
+| Full          | their company's documents in full; after an alliance locks, the partner company's too | yes: every passage on the tab can be pinned and cited like interview evidence |
 
 Never on the tab, in any mode: "in confidence" records (kind `interview`: what a
 stakeholder admits only when trust is high) and deleted text (removed from a document;
@@ -185,8 +185,7 @@ curl -s -H "$AUTH" -X POST $PX/phases/current/end
 ```
 
 A timed phase closes interviews by itself when its time runs out; it stays listed as
-running until you end it or start the next one. Phases with no timer (`planned_seconds`
-0) run until you end them.
+running until you end it or start the next one. Phases with no timer (`planned_seconds` 0) run until you end them.
 
 ## Watching
 

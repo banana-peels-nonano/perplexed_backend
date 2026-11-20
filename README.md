@@ -70,36 +70,36 @@ ruff check . && ruff format --check .
 
 ## Dev tools (dev database only)
 
-| Command | What it does |
-|---|---|
-| `python scripts/smoke_interview.py --code <A01> --reset [--conversation 1] [--trust 80]` | A scripted interview through the real app and model, with per-question tokens, cost and latency |
-| `python scripts/redteam.py --code <A01>` | Hostile-question suite (leading, fishing, injection, cross-company, relayed, controls) plus a retrieval recall test; report in `reports/` |
-| `python scripts/cost_probe.py --dry-run --configs all` | Token and cost projections for an event size |
+| Command                                                                                  | What it does                                                                                                                              |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `python scripts/smoke_interview.py --code <A01> --reset [--conversation 1] [--trust 80]` | A scripted interview through the real app and model, with per-question tokens, cost and latency                                           |
+| `python scripts/redteam.py --code <A01>`                                                 | Hostile-question suite (leading, fishing, injection, cross-company, relayed, controls) plus a retrieval recall test; report in `reports/` |
+| `python scripts/cost_probe.py --dry-run --configs all`                                   | Token and cost projections for an event size                                                                                              |
 
 Add `--fake` to the first two to run without API calls.
 
 ## API (so far)
 
-| Method | Path | |
-|---|---|---|
-| POST | `/api/v1/auth/login` | access code → session cookie (`pxd_session`, HttpOnly) |
-| POST | `/api/v1/auth/logout` | |
-| GET | `/api/v1/me` | the team behind the session |
-| GET | `/api/v1/stakeholders` | this team's company's stakeholders, with questions left |
-| GET | `/api/v1/stakeholders/{id}` | one stakeholder |
-| POST | `/api/v1/stakeholders/{id}/questions` | ask; returns the answer and evidence cards |
-| GET | `/api/v1/stakeholders/{id}/messages` | the team's thread with that stakeholder |
-| GET | `/api/v1/status` | phase, time left, questions left per stakeholder, evidence count |
-| GET | `/api/v1/evidence` | every card the team has been shown, from any stakeholder |
-| GET | `/api/v1/records` | the records tab: off, titles only, or the documents in full (organisers' switch) |
-| GET | `/api/v1/board` | the team's evidence board |
-| PUT | `/api/v1/board` | save the board; send the `version` you edited (409 if someone saved first) |
-| GET | `/api/v1/brief` | the case brief and the team's company brief |
-| GET | `/api/v1/announcements` | organiser broadcasts for this team |
-| GET | `/api/v1/display` | no login: the projector page (phase, clock, public broadcasts) |
-| GET | `/api/v1/registration` | no login: is sign-up open, team size, email domain |
-| POST | `/api/v1/registration` | no login: register a team; the access code is emailed to every member, never returned |
-| WS | `/api/v1/ws` | live "what changed" notifications for the team's open tabs |
+| Method | Path                                  |                                                                                       |
+| ------ | ------------------------------------- | ------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/auth/login`                  | access code → session cookie (`pxd_session`, HttpOnly)                                |
+| POST   | `/api/v1/auth/logout`                 |                                                                                       |
+| GET    | `/api/v1/me`                          | the team behind the session                                                           |
+| GET    | `/api/v1/stakeholders`                | this team's company's stakeholders, with questions left                               |
+| GET    | `/api/v1/stakeholders/{id}`           | one stakeholder                                                                       |
+| POST   | `/api/v1/stakeholders/{id}/questions` | ask; returns the answer and evidence cards                                            |
+| GET    | `/api/v1/stakeholders/{id}/messages`  | the team's thread with that stakeholder                                               |
+| GET    | `/api/v1/status`                      | phase, time left, questions left per stakeholder, evidence count                      |
+| GET    | `/api/v1/evidence`                    | every card the team has been shown, from any stakeholder                              |
+| GET    | `/api/v1/records`                     | the records tab: off, titles only, or the documents in full (organisers' switch)      |
+| GET    | `/api/v1/board`                       | the team's evidence board                                                             |
+| PUT    | `/api/v1/board`                       | save the board; send the `version` you edited (409 if someone saved first)            |
+| GET    | `/api/v1/brief`                       | the case brief and the team's company brief                                           |
+| GET    | `/api/v1/announcements`               | organiser broadcasts for this team                                                    |
+| GET    | `/api/v1/display`                     | no login: the projector page (phase, clock, public broadcasts)                        |
+| GET    | `/api/v1/registration`                | no login: is sign-up open, team size, email domain                                    |
+| POST   | `/api/v1/registration`                | no login: register a team; the access code is emailed to every member, never returned |
+| WS     | `/api/v1/ws`                          | live "what changed" notifications for the team's open tabs                            |
 
 Errors are always `{"error": {"code", "message", "details"}}`. Another company's
 stakeholder is a 404.
@@ -146,12 +146,12 @@ tests/           pytest suite and fixtures
 `web/vendor/` (no npm, no build step), fonts self-hosted in `web/fonts/` (OFL). The backend
 serves it, so the browser sees one origin and the session cookie just works.
 
-| URL | |
-|---|---|
-| `/` | team portal: login, brief, people (badges), interviews, evidence, board, documents, rounds |
-| `/console` | organiser console (asks for `ADMIN_TOKEN`; kept in that tab only) |
-| `/display` | projector page: round, clock, public announcements (no login) |
-| `/register` | team sign-up with thapar.edu addresses (while organisers keep it open) |
+| URL         |                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| `/`         | team portal: login, brief, people (badges), interviews, evidence, board, documents, rounds |
+| `/console`  | organiser console (asks for `ADMIN_TOKEN`; kept in that tab only)                          |
+| `/display`  | projector page: round, clock, public announcements (no login)                              |
+| `/register` | team sign-up with thapar.edu addresses (while organisers keep it open)                     |
 
 Edit a file in `web/`, refresh the browser. Pages are sent with a strict
 Content-Security-Policy (scripts only from this server, no inline scripts).
@@ -169,7 +169,7 @@ and what the UI must never show.
 
 ## Deploying
 
-See [DEPLOY.md](DEPLOY.md): one server, `cd deploy && ./setup.sh`.
+See [DEPLOY.md](DEPLOY.md) for manual production deployment with Docker Compose and shared Caddy.
 
 ## Status
 

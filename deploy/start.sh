@@ -7,6 +7,7 @@ alembic upgrade head
 if [ -n "${SEED_CASE:-}" ]; then
   python -m app.seed "$SEED_CASE" --event-name "${EVENT_NAME:-PERPLEXED 2.0}"
 fi
+# ponytail: --no-access-log, 50 teams polling = 100k+ GET lines/day. Errors/tracebacks still log. Caddy can log requests if ever needed.
 # ONE process on purpose: live updates keep their registry in memory (D-021).
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" \
-  --proxy-headers --forwarded-allow-ips='*' --timeout-graceful-shutdown 10
+  --no-access-log --proxy-headers --forwarded-allow-ips='*' --timeout-graceful-shutdown 10

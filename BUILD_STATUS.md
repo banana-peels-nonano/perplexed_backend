@@ -57,34 +57,34 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 
 ## 5. Implementation progress
 
-| Component | Status | Notes |
-|---|---|---|
-| Development environment | Done | Docker, Postgres 17, venv, test database |
-| FastAPI foundation | Done | settings, error envelope, health check |
-| Database schema and migrations | Done | migrations 0001–0010 |
-| Case format, loader, seed | Done | validated TOML; placeholder case only |
-| Authentication and teams | Done | access codes, sessions, team context |
-| Interview flow | Done | quota, idempotency, one question in flight, refund on failure, memory |
-| Retrieval | Done | recall 17/17 on the placeholder case |
-| Disclosure and grounding checks | Done | leak, paraphrase, ungrounded-fact, citation checks; safe non-answers |
-| LLM provider layer | Done | Anthropic provider, fake provider for tests, cost accounting |
-| Hostile-question suite | Done | 27 probes, 0 leaks on the placeholder case |
-| Event engine (phases) | Done | start/pause/resume/extend/end; timed phases close interviews on time |
-| Trust and HR mechanics | Done | per-question trust moves; HR per team per department (warning, complaint, 10-minute department lockout); every strike logged for efficiency scoring; numbers are defaults in event config until the seniors confirm |
-| Portal endpoints | Done | status (the team's own clock), evidence list, board, case brief, announcements, projector display |
-| Evidence board | Done | storage, checks, and the board UI (drag, notes, quotes, team-drawn links) |
-| Rounds, documents, results | Done | organisers add any number of rounds, hand out documents per round/company/team, publish each team's status |
-| Live updates (WebSockets) | Done | notify-then-refetch; session-cookie auth, origin check, tab cap, logout closes that laptop's sockets |
-| Admin and organiser endpoints | Done | token-protected: team registration, balanced company assignment, time back per team, announcements, prompt-attack alerts, HR log, clues found, team view with per-question decisions, fixes, live config, content reload, costs (ORGANISERS.md) |
-| Real case conversion | Done (draft) | both cases from the 15 Nov design doc converted (kept in `content/`, never committed) |
-| Alliances | Done | cross-company requests, mutual lock, organiser pairing (incl. three teams), partner evidence after the lock |
-| Submissions | Done | Audit Findings Sheet: every version kept, server-side deadline, citations incl. partner evidence, cross-company rule |
-| Portraits and login art | Done | flat colour-block stakeholder portraits from each `look` in the case file (fallback from the id); isometric pixel-art login scene in place of the scanline "?" |
-| Records tab | Done | organisers switch it live: off (default), titles only, or full documents (then citable; partner company's after an alliance locks); "in confidence" records and deleted text never shown |
-| Team self-registration | Done | `/register`: team name + 2–4 members with @thapar.edu addresses; one email with the shared access code to every member (SMTP: Gmail app password or Brevo); console tab to open/close, resend, remove |
-| Judging | Pending | judges read sheets in the console; scoring form not built |
-| Frontend | Done (first version) | `web/`: team portal, organiser console, projector page; served by the backend |
-| Staging and production deployment | Ready to run | Dockerfile, `deploy/` (compose, Caddy, nginx variant, 5-minute backups, setup script), `render.yaml` for free staging; waiting on SSH + DNS |
+| Component                         | Status               | Notes                                                                                                                                                                                                                                           |
+| --------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Development environment           | Done                 | Docker, Postgres 17, venv, test database                                                                                                                                                                                                        |
+| FastAPI foundation                | Done                 | settings, error envelope, health check                                                                                                                                                                                                          |
+| Database schema and migrations    | Done                 | migrations 0001–0010                                                                                                                                                                                                                            |
+| Case format, loader, seed         | Done                 | validated TOML; placeholder case only                                                                                                                                                                                                           |
+| Authentication and teams          | Done                 | access codes, sessions, team context                                                                                                                                                                                                            |
+| Interview flow                    | Done                 | quota, idempotency, one question in flight, refund on failure, memory                                                                                                                                                                           |
+| Retrieval                         | Done                 | recall 17/17 on the placeholder case                                                                                                                                                                                                            |
+| Disclosure and grounding checks   | Done                 | leak, paraphrase, ungrounded-fact, citation checks; safe non-answers                                                                                                                                                                            |
+| LLM provider layer                | Done                 | Anthropic provider, fake provider for tests, cost accounting                                                                                                                                                                                    |
+| Hostile-question suite            | Done                 | 27 probes, 0 leaks on the placeholder case                                                                                                                                                                                                      |
+| Event engine (phases)             | Done                 | start/pause/resume/extend/end; timed phases close interviews on time                                                                                                                                                                            |
+| Trust and HR mechanics            | Done                 | per-question trust moves; HR per team per department (warning, complaint, 10-minute department lockout); every strike logged for efficiency scoring; numbers are defaults in event config until the seniors confirm                             |
+| Portal endpoints                  | Done                 | status (the team's own clock), evidence list, board, case brief, announcements, projector display                                                                                                                                               |
+| Evidence board                    | Done                 | storage, checks, and the board UI (drag, notes, quotes, team-drawn links)                                                                                                                                                                       |
+| Rounds, documents, results        | Done                 | organisers add any number of rounds, hand out documents per round/company/team, publish each team's status                                                                                                                                      |
+| Live updates (WebSockets)         | Done                 | notify-then-refetch; session-cookie auth, origin check, tab cap, logout closes that laptop's sockets                                                                                                                                            |
+| Admin and organiser endpoints     | Done                 | token-protected: team registration, balanced company assignment, time back per team, announcements, prompt-attack alerts, HR log, clues found, team view with per-question decisions, fixes, live config, content reload, costs (ORGANISERS.md) |
+| Real case conversion              | Done (draft)         | both cases from the 15 Nov design doc converted (kept in `content/`, never committed)                                                                                                                                                           |
+| Alliances                         | Done                 | cross-company requests, mutual lock, organiser pairing (incl. three teams), partner evidence after the lock                                                                                                                                     |
+| Submissions                       | Done                 | Audit Findings Sheet: every version kept, server-side deadline, citations incl. partner evidence, cross-company rule                                                                                                                            |
+| Portraits and login art           | Done                 | flat colour-block stakeholder portraits from each `look` in the case file (fallback from the id); isometric pixel-art login scene in place of the scanline "?"                                                                                  |
+| Records tab                       | Done                 | organisers switch it live: off (default), titles only, or full documents (then citable; partner company's after an alliance locks); "in confidence" records and deleted text never shown                                                        |
+| Team self-registration            | Done                 | `/register`: team name + 2–4 members with @thapar.edu addresses; one email with the shared access code to every member (SMTP: Gmail app password or Brevo); console tab to open/close, resend, remove                                           |
+| Judging                           | Pending              | judges read sheets in the console; scoring form not built                                                                                                                                                                                       |
+| Frontend                          | Done (first version) | `web/`: team portal, organiser console, projector page; served by the backend                                                                                                                                                                   |
+| Staging and production deployment | Ready to run         | Dockerfile, `deploy/` (compose, Caddy, nginx variant, 5-minute backups, setup script), `render.yaml` for free staging; waiting on SSH + DNS                                                                                                     |
 
 Tests: 185 passing (`python -m pytest -q`).
 

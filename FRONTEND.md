@@ -22,24 +22,30 @@ then <http://127.0.0.1:8000/docs>). Every path below is under `/api/v1`.
 Every error has the same shape. Switch on `code`, show `message`:
 
 ```json
-{"error": {"code": "QUOTA_EXHAUSTED", "message": "no questions left for this person", "details": {}}}
+{
+  "error": {
+    "code": "QUOTA_EXHAUSTED",
+    "message": "no questions left for this person",
+    "details": {}
+  }
+}
 ```
 
-| code | status | what to do |
-|---|---|---|
-| `INVALID_CODE` | 401 | wrong access code |
-| `SESSION_LIMIT` | 409 | team already has 2 laptops logged in |
-| `UNAUTHENTICATED` | 401 | session missing or expired: back to login |
-| `COMPANY_NOT_ASSIGNED` | 409 | team not yet assigned a company |
-| `PHASE_CLOSED` | 409 | interviews aren't open in this phase |
-| `QUOTA_EXHAUSTED` | 409 | no questions left for this stakeholder |
-| `QUESTION_IN_FLIGHT` | 409 | a teammate's question to this person is still being answered |
-| `HR_LOCKOUT` | 409 | someone in this person's department filed an HR complaint over the team's conduct; the whole department is closed to the team. `details.retry_after_seconds` says when it reopens, `details.department` which one (the attempt isn't charged) |
-| `PROVIDER_BUSY` | 503 | try again in a few seconds (the question was not charged) |
-| `BOARD_CONFLICT` | 409 | someone saved the board first: reload, reapply, save |
-| `UNKNOWN_EVIDENCE`, `BAD_QUOTE` | 422 | the board refers to something the team can't use |
-| `INVALID_REQUEST` | 422 | malformed body; `details.errors` lists what |
-| `NOT_FOUND` | 404 | includes other companies' stakeholders, by design |
+| code                            | status | what to do                                                                                                                                                                                                                                    |
+| ------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INVALID_CODE`                  | 401    | wrong access code                                                                                                                                                                                                                             |
+| `SESSION_LIMIT`                 | 409    | team already has 2 laptops logged in                                                                                                                                                                                                          |
+| `UNAUTHENTICATED`               | 401    | session missing or expired: back to login                                                                                                                                                                                                     |
+| `COMPANY_NOT_ASSIGNED`          | 409    | team not yet assigned a company                                                                                                                                                                                                               |
+| `PHASE_CLOSED`                  | 409    | interviews aren't open in this phase                                                                                                                                                                                                          |
+| `QUOTA_EXHAUSTED`               | 409    | no questions left for this stakeholder                                                                                                                                                                                                        |
+| `QUESTION_IN_FLIGHT`            | 409    | a teammate's question to this person is still being answered                                                                                                                                                                                  |
+| `HR_LOCKOUT`                    | 409    | someone in this person's department filed an HR complaint over the team's conduct; the whole department is closed to the team. `details.retry_after_seconds` says when it reopens, `details.department` which one (the attempt isn't charged) |
+| `PROVIDER_BUSY`                 | 503    | try again in a few seconds (the question was not charged)                                                                                                                                                                                     |
+| `BOARD_CONFLICT`                | 409    | someone saved the board first: reload, reapply, save                                                                                                                                                                                          |
+| `UNKNOWN_EVIDENCE`, `BAD_QUOTE` | 422    | the board refers to something the team can't use                                                                                                                                                                                              |
+| `INVALID_REQUEST`               | 422    | malformed body; `details.errors` lists what                                                                                                                                                                                                   |
+| `NOT_FOUND`                     | 404    | includes other companies' stakeholders, by design                                                                                                                                                                                             |
 
 ## 3. Interviews
 
@@ -92,8 +98,8 @@ refetch on the live event `{"type": "records"}` (organisers changed the mode). `
 
 - `GET /rounds` → every round in order (`key`, `name`, `status`, `planned_seconds`,
   `capabilities`) with `my_status` (`advancing` / `eliminated` / `waitlisted` / `pending`
-  + `message`) once organisers publish it. Show it prominently: it's how teams learn
-  whether they're through.
+  - `message`) once organisers publish it. Show it prominently: it's how teams learn
+    whether they're through.
 - `GET /documents` → what the team has been handed; `GET /documents/{id}` returns
   `{"title", "body"}` for a note (markdown) or the file itself (link to it directly).
 - Error `NOT_IN_ROUND` (409): the team was eliminated from the current round.
@@ -103,8 +109,8 @@ refetch on the live event `{"type": "records"}` (organisers changed the mode). `
   `POST /alliance/requests/{id}/accept`, `DELETE /alliance/requests/{id}`,
   `GET /alliance/evidence` (partners' cards, with `team_code`; only once locked).
 - **Findings sheet:** `GET /submission`, `PUT /submission {"base_version", "summary",
-  "findings": [{id, title, finding, impact, recommendation, sources, cross_company}],
-  "final"}`. 409 `SUBMISSION_CONFLICT` = a teammate saved first; 409 `SUBMISSIONS_CLOSED`;
+"findings": [{id, title, finding, impact, recommendation, sources, cross_company}],
+"final"}`. 409 `SUBMISSION_CONFLICT` = a teammate saved first; 409 `SUBMISSIONS_CLOSED`;
   422 `SHEET_INCOMPLETE` (`details.problems`) or `UNKNOWN_EVIDENCE`.
 
 ## 6. What the UI must never do
@@ -124,22 +130,22 @@ Open one WebSocket per tab: `new WebSocket("wss://<same host>/api/v1/ws")`. The 
 cookie is sent automatically (same origin). The socket only says **what changed**; you
 refetch it through the normal endpoints. It never carries content.
 
-| event | refetch |
-|---|---|
-| `{"type": "hello", "team": "A01"}` | nothing: connected |
-| `{"type": "phase"}` | `GET /status` (phase, clock, `interviews_open`) |
-| `{"type": "stakeholders"}` | `GET /status` or `GET /stakeholders` (questions left, availability) |
-| `{"type": "thread", "stakeholder_id": "cfo"}` | `GET /stakeholders/cfo/messages` |
-| `{"type": "evidence"}` | `GET /evidence` |
-| `{"type": "board", "version": 4}` | `GET /board` if your version is older |
-| `{"type": "content"}` | everything on screen (the case was reloaded) |
-| `{"type": "team"}` | `GET /status` and `GET /brief` (the team's company was assigned or changed) |
-| `{"type": "announcement"}` | `GET /announcements` (new or retracted broadcast) |
-| `{"type": "documents"}` | `GET /documents` (released, withdrawn, or a round started) |
-| `{"type": "rounds"}` | `GET /rounds` (a result for this team was published) |
-| `{"type": "alliance"}` | `GET /alliance` and `GET /alliance/evidence` |
-| `{"type": "submission"}` | `GET /submission` (a teammate saved) |
-| `{"type": "ping"}` | nothing (keep-alive every 25 s) |
+| event                                         | refetch                                                                     |
+| --------------------------------------------- | --------------------------------------------------------------------------- |
+| `{"type": "hello", "team": "A01"}`            | nothing: connected                                                          |
+| `{"type": "phase"}`                           | `GET /status` (phase, clock, `interviews_open`)                             |
+| `{"type": "stakeholders"}`                    | `GET /status` or `GET /stakeholders` (questions left, availability)         |
+| `{"type": "thread", "stakeholder_id": "cfo"}` | `GET /stakeholders/cfo/messages`                                            |
+| `{"type": "evidence"}`                        | `GET /evidence`                                                             |
+| `{"type": "board", "version": 4}`             | `GET /board` if your version is older                                       |
+| `{"type": "content"}`                         | everything on screen (the case was reloaded)                                |
+| `{"type": "team"}`                            | `GET /status` and `GET /brief` (the team's company was assigned or changed) |
+| `{"type": "announcement"}`                    | `GET /announcements` (new or retracted broadcast)                           |
+| `{"type": "documents"}`                       | `GET /documents` (released, withdrawn, or a round started)                  |
+| `{"type": "rounds"}`                          | `GET /rounds` (a result for this team was published)                        |
+| `{"type": "alliance"}`                        | `GET /alliance` and `GET /alliance/evidence`                                |
+| `{"type": "submission"}`                      | `GET /submission` (a teammate saved)                                        |
+| `{"type": "ping"}`                            | nothing (keep-alive every 25 s)                                             |
 
 Close codes: `4401` not logged in or logged out → login screen; `4403` wrong origin;
 `4429` too many tabs for this team (limit 8). Any other close: reconnect after a few
@@ -163,11 +169,23 @@ aren't replayed).
 {
   "version": 3,
   "cards": [
-    {"id": "c1", "kind": "evidence", "passage_id": "A-FIN-002#1", "x": 40, "y": 30},
-    {"id": "q1", "kind": "quote", "message_id": "<answer_id>", "start": 12, "end": 58},
-    {"id": "n1", "kind": "note", "text": "Ask Arjun who changed sampling"}
+    {
+      "id": "c1",
+      "kind": "evidence",
+      "passage_id": "A-FIN-002#1",
+      "x": 40,
+      "y": 30
+    },
+    {
+      "id": "q1",
+      "kind": "quote",
+      "message_id": "<answer_id>",
+      "start": 12,
+      "end": 58
+    },
+    { "id": "n1", "kind": "note", "text": "Ask Arjun who changed sampling" }
   ],
-  "links": [{"from": "c1", "to": "q1", "label": "contradicts"}],
+  "links": [{ "from": "c1", "to": "q1", "label": "contradicts" }],
   "extra": {}
 }
 ```

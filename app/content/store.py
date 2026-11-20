@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -43,7 +44,8 @@ DEFAULT_LABELS = [
 async def current_event(session: AsyncSession) -> Event:
     event = await session.scalar(select(Event).order_by(Event.created_at).limit(1))
     if event is None:
-        raise RuntimeError("no event in the database: run `python -m app.seed <case.toml>` first")
+        # ponytail: unseeded DB is a config state, not a crash -> 503 instead of 500
+        raise HTTPException(503, "event not set up yet: run `python -m app.seed <case.toml>`")
     return event
 
 

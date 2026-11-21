@@ -774,6 +774,7 @@ function Leaderboard() {
   const peak = Math.max(1, ...buckets);
   return html`<div class="col" style="gap:20px">
     <h1 class="hero-title" style="font-size:34px">Leaderboard</h1>
+    <${BoardLock} />
     <p class="small muted" style="margin:0;max-width:680px">
       Pick a round, edit scores and save. Teams see nothing until you press
       "Show to teams" for that round; after that, every save updates their Rounds page live.
@@ -832,6 +833,20 @@ function Leaderboard() {
   </div>`;
 }
 
+function BoardLock() {
+  const [st, reload] = usePoll(() => A("/boards/locked"), 15000, []);
+  if (!st) return null;
+  return html`<div class="row" style="gap:10px">
+    <span class=${"chip" + (st.locked ? " solid" : "")}>${st.locked ? "Evidence boards locked" : "Evidence boards editable"}</span>
+    <button class="btn small ghost" onClick=${async () => {
+      if (!st.locked || confirm("Let teams edit their evidence boards again?")) {
+        await run(() => A("/boards/locked", { method: "PUT", body: { locked: !st.locked } }), st.locked ? "Boards unlocked" : "Boards locked");
+        reload();
+      }
+    }}>${st.locked ? "Unlock boards" : "Lock all boards"}</button>
+  </div>`;
+}
+
 function BoardView({ code }) {
   const [b, setB] = useState(null);
   const [checked, setChecked] = useState(null);
@@ -855,6 +870,7 @@ function BoardView({ code }) {
   const short = (c) => (!c ? "?" : c.kind === "note" ? `note “${(c.text || "").slice(0, 40)}”` : head(c));
   const notes = b.cards.filter((c) => c.kind === "note");
   return html`<div class="col" style="margin-top:16px;gap:10px">
+    <${BoardLock} />
     <div class="kicker">Evidence board · version ${b.version} · ${b.cards.length} cards (${notes.length} notes) · ${b.links.length} links</div>
     <div class="small muted">
       Team last saved ${b.updated_at ? ago(b.updated_at) : "never"} · refreshed ${checked ? Math.round((Date.now() - checked) / 1000) + "s ago" : "—"} (auto every 5s; this is exactly what is saved on the server)

@@ -62,7 +62,11 @@ export function Board({ S, hasTicker }) {
         }));
         setDirty(false);
       } catch (e) {
-        if (e.code === "BOARD_CONFLICT") {
+        if (e.code === "BOARD_LOCKED") {
+          toast(e.message, "err");
+          setDirty(false);
+          await reload();
+        } else if (e.code === "BOARD_CONFLICT") {
           toast(
             "A teammate changed the board — reloaded their version. Redo your last move.",
             "err",

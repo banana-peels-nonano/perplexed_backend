@@ -175,6 +175,25 @@ async def team_board(code: str, session: DbSession) -> dict:
     }
 
 
+class LockIn(BaseModel):
+    locked: bool
+
+
+@admin.get("/boards/locked")
+async def boards_locked(session: DbSession) -> dict:
+    return {"locked": bool((await current_event(session)).config.get("boards_locked"))}
+
+
+@admin.put("/boards/locked")
+async def lock_boards(body: LockIn, session: DbSession) -> dict:
+    """Locked: no team can change its evidence board (organisers can still view them)."""
+    event = await current_event(session)
+    event.config = {**event.config, "boards_locked": body.locked}
+    flag_modified(event, "config")
+    await session.commit()
+    return {"locked": body.locked}
+
+
 @teams.get("/leaderboard")
 async def leaderboard(team: CurrentTeam, session: DbSession) -> dict:
     lb = await _leaderboard(session)

@@ -221,3 +221,14 @@ async def test_scores_move_the_leaderboard_and_boards_are_visible(seeded, make_c
     assert lb["teams"][0]["team"] == "A01"
     board = (await org.get(f"{API}/admin/teams/A01/board", headers=AUTH)).json()
     assert board["cards"] == [] and board["version"] == 0
+
+
+async def test_locked_boards_refuse_edits(seeded, make_client, admin_on):
+    org = make_client()
+    a01 = await _login(make_client, seeded["A01"])
+    await org.put(f"{API}/admin/boards/locked", json={"locked": True}, headers=AUTH)
+    r = await a01.put(f"{API}/board", json={"version": 0, "cards": [], "links": [], "extra": {}})
+    assert r.json()["error"]["code"] == "BOARD_LOCKED"
+    await org.put(f"{API}/admin/boards/locked", json={"locked": False}, headers=AUTH)
+    r = await a01.put(f"{API}/board", json={"version": 0, "cards": [], "links": [], "extra": {}})
+    assert r.status_code == 200, r.text

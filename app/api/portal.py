@@ -247,6 +247,9 @@ async def put_board(
     body: BoardIn, team: CurrentTeam, session: DbSession, request: Request
 ) -> BoardOut:
     _require_company(team)
+    if (await current_event(session)).config.get("boards_locked"):
+        raise ApiError(409, "BOARD_LOCKED", "the organisers have locked evidence boards; "
+                       "yours is saved as it was")  # fmt: skip
     # evidence cards: only passages this team (or a locked alliance partner) has been shown
     shown = await usable_passages(session, team.team_id)
     unknown = sorted({c.passage_id for c in body.cards if c.kind == "evidence"} - shown)

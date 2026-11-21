@@ -190,9 +190,9 @@ async def test_sheet_versions_conflicts_and_submit(seeded, make_client, admin_on
 
     r = await a01.put(
         f"{API}/submission",
-        json={"base_version": 1, "findings": [_finding(sources=[])], "final": True},
+        json={"base_version": 1, "findings": [_finding(title=" ")], "final": True},
     )
-    assert r.json()["error"]["code"] == "SHEET_INCOMPLETE"
+    assert r.json()["error"]["code"] == "SHEET_INCOMPLETE"  # sources are optional, titles not
     r = await a01.put(
         f"{API}/submission", json={"base_version": 1, "findings": [_finding()], "final": True}
     )

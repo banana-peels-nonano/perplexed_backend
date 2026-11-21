@@ -22,6 +22,7 @@ from app.api import (
     portal,
     registration,
     rounds,
+    scores,
     stakeholders,
     submissions,
 )
@@ -60,6 +61,8 @@ def create_app(provider: LlmProvider | None = None) -> FastAPI:
     app.include_router(admin.router, prefix=API_PREFIX)
     app.include_router(rounds.admin, prefix=API_PREFIX)
     app.include_router(rounds.teams, prefix=API_PREFIX)
+    app.include_router(scores.admin, prefix=API_PREFIX)
+    app.include_router(scores.teams, prefix=API_PREFIX)
     app.include_router(alliances.teams, prefix=API_PREFIX)
     app.include_router(alliances.admin, prefix=API_PREFIX)
     app.include_router(submissions.teams, prefix=API_PREFIX)

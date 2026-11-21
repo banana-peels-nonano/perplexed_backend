@@ -427,3 +427,15 @@ class EmailLog(Base):
     status: Mapped[str] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created_at()
+
+
+class TeamScore(Base):
+    """Points organisers gave a team for a round. Live: the leaderboard moves on save."""
+
+    __tablename__ = "team_score"
+
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), primary_key=True)
+    phase_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("phase.id"), primary_key=True)
+    points: Mapped[Decimal] = mapped_column(Numeric(8, 2))
+    note: Mapped[str] = mapped_column(Text, server_default=sql_text("''"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

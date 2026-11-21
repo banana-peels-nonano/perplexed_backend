@@ -198,3 +198,24 @@ async def test_round_results_are_drafted_then_published_together(seeded, make_cl
     )
     assert r.json()["error"]["code"] == "NOT_IN_ROUND"
     assert (await a01.get(f"{API}/status")).json()["phase"]["interviews_open"] is True
+
+
+async def test_scores_move_the_leaderboard_and_boards_are_visible(seeded, make_client, admin_on):
+    org = make_client()
+    a01 = await _login(make_client, seeded["A01"])
+    r = await org.put(
+        f"{API}/admin/phases/round2/scores",
+        json={"entries": [{"team": "A01", "points": 7.5, "note": "tidy"}, {"team": "B01", "points": 9}]},
+        headers=AUTH,
+    )
+    assert r.status_code == 200, r.text
+    lb = (await a01.get(f"{API}/leaderboard")).json()
+    assert [(t["team"], t["rank"], t["total"]) for t in lb["teams"][:2]] == [("B01", 1, 9.0), ("A01", 2, 7.5)]
+    assert "notes" not in lb["teams"][0] and lb["rounds"][0]["key"] == "round2"
+    admin_lb = (await org.get(f"{API}/admin/leaderboard", headers=AUTH)).json()
+    assert next(t for t in admin_lb["teams"] if t["team"] == "A01")["notes"] == {"round2": "tidy"}
+    await org.put(f"{API}/admin/phases/round2/scores", json={"entries": [{"team": "B01", "points": None}]}, headers=AUTH)
+    lb = (await a01.get(f"{API}/leaderboard")).json()
+    assert lb["teams"][0]["team"] == "A01"
+    board = (await org.get(f"{API}/admin/teams/A01/board", headers=AUTH)).json()
+    assert board["cards"] == [] and board["version"] == 0

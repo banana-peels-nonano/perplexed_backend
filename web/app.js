@@ -194,6 +194,9 @@ function onLive(ev) {
     case "rounds":
       loaders.rounds();
       break;
+    case "leaderboard":
+      S.set((st) => ({ lbTick: (st.lbTick || 0) + 1 }));
+      break;
     case "content":
       loadAll();
       toast("The case was updated by the organisers.");
@@ -1450,6 +1453,25 @@ const STATUS_TEXT = {
   waitlisted: "Waitlisted",
   pending: "Pending",
 };
+function LeaderboardTable() {
+  const s = useStore(S);
+  const [lb, setLb] = useState(null);
+  useEffect(() => {
+    api("/leaderboard").then(setLb).catch(() => {});
+  }, [s.lbTick]);
+  if (!lb || !lb.rounds.length) return null;
+  const me = s.status?.team?.code || s.me?.code;
+  return html`<div style="margin-top:32px">
+    <div class="kicker">Leaderboard</div>
+    <table class="t" style="margin-top:12px;width:100%"><thead><tr><th>#</th><th>Team</th>
+      ${lb.rounds.map((r) => html`<th>${r.name}</th>`)}<th>Total</th></tr></thead>
+      <tbody>${lb.teams.map((t) => html`<tr style=${t.team === me ? "font-weight:700" : ""}>
+        <td>${t.rank}</td><td>${t.name}${t.team === me ? " (you)" : ""}</td>
+        ${lb.rounds.map((r) => html`<td>${t.rounds[r.key] ?? "—"}</td>`)}<td>${t.total}</td>
+      </tr>`)}</tbody></table>
+  </div>`;
+}
+
 function Rounds() {
   const s = useStore(S);
   const anns = s.announcements;
@@ -1472,6 +1494,7 @@ function Rounds() {
           </div>`,
       )}
     </div>
+    <${LeaderboardTable} />
     ${s.rounds
       .filter((r) => r.my_status?.message)
       .reverse()

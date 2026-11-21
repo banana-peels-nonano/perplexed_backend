@@ -39,6 +39,7 @@ EXPECTED_TABLES = {
     "clue",
     "document",
     "team_round_status",
+    "team_score",
     "alliance",
     "alliance_member",
     "submission_version",

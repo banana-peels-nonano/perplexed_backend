@@ -642,6 +642,7 @@ function TeamDetail({ t, onClose }) {
   const [thread, setThread] = useState(null);
   const [clues, setClues] = useState(null);
   const [code, setCode] = useState(null);
+  const [board, setBoard] = useState(false);
   useEffect(() => {
     run(() => A(`/teams/${t.code}/clues`)).then(setClues);
   }, [t.code]);
@@ -668,7 +669,9 @@ function TeamDetail({ t, onClose }) {
             (await run(() => A(`/teams/${t.code}`, { method: "DELETE" }), "Removed")))
           onClose();
       }}>Remove team</button>
+      <button class="btn ghost small" onClick=${() => setBoard(!board)}>${board ? "Hide" : "View"} evidence board</button>
     </div>
+    ${board && html`<${BoardView} code=${t.code} />`}
     <table class="t"><thead><tr><th>Stakeholder</th><th>Dept</th><th>Trust</th><th>Tier</th><th>Qs used</th><th>Strikes</th><th>Lockout</th><th></th></tr></thead>
       <tbody>${t.stakeholders.map(
         (s) =>
@@ -721,6 +724,87 @@ function TeamDetail({ t, onClose }) {
       </div>`
     }
   </${Modal}>`;
+}
+
+// ------------------------------------------------------------------ leaderboard
+function Leaderboard() {
+  const { phases } = useStore(C);
+  const [round, setRound] = useState("");
+  const [edits, setEdits] = useState({});
+  const [lb, reload] = usePoll(() => A("/leaderboard"), 5000, []);
+  useEffect(() => {
+    refreshShared();
+  }, []);
+  useEffect(() => {
+    if (!round && phases.length) setRound(phases[0].key);
+  }, [phases]);
+  const set = (team, field, v) =>
+    setEdits((e) => ({ ...e, [team]: { ...e[team], [field]: v } }));
+  const save = async () => {
+    const rows = lb?.teams || [];
+    const entries = Object.entries(edits).map(([team, e]) => {
+      const r = rows.find((x) => x.team === team) || {};
+      const pts = e.points ?? r.rounds?.[round];
+      return {
+        team,
+        points: pts === "" || pts == null ? null : Number(pts),
+        note: e.note ?? r.notes?.[round] ?? "",
+      };
+    });
+    if (!entries.length) return toast("Nothing changed.");
+    if (await run(() => A(`/phases/${round}/scores`, { method: "PUT", body: { entries } }), "Scores saved — leaderboard updated")) {
+      setEdits({});
+      reload();
+    }
+  };
+  return html`<div class="col" style="gap:20px">
+    <h1 class="hero-title" style="font-size:34px">Leaderboard</h1>
+    <p class="small muted" style="margin:0;max-width:640px">
+      Enter points for a round and save: every team's Rounds page updates at
+      once. Totals add up all rounds. Notes are for organisers only. Clear a box
+      to remove that score.
+    </p>
+    <div class="row" style="flex-wrap:wrap">
+      <select class="select" style="max-width:240px" value=${round} onChange=${(e) => { setRound(e.target.value); setEdits({}); }}>
+        ${phases.map((p) => html`<option value=${p.key}>Score: ${p.name || p.key}</option>`)}
+      </select>
+      <button class="btn small" onClick=${save}>Save scores (${Object.keys(edits).length})</button>
+    </div>
+    <table class="t"><thead><tr><th>#</th><th>Team</th><th>Co.</th>
+      ${(lb?.rounds || []).map((r) => html`<th>${r.name}</th>`)}
+      <th>Total</th><th>${round} points</th><th>Note</th></tr></thead>
+      <tbody>${(lb?.teams || []).map((t) => html`<tr>
+        <td>${t.rank}</td><td>${t.team} · ${t.name}</td><td>${t.company || "—"}</td>
+        ${(lb?.rounds || []).map((r) => html`<td>${t.rounds[r.key] ?? "—"}</td>`)}
+        <td><b>${t.total}</b></td>
+        <td><input class="input" style="width:80px" type="number" step="0.5"
+          value=${edits[t.team]?.points ?? t.rounds?.[round] ?? ""}
+          onInput=${(e) => set(t.team, "points", e.target.value)} /></td>
+        <td><input class="input" style="min-width:200px"
+          value=${edits[t.team]?.note ?? t.notes?.[round] ?? ""}
+          onInput=${(e) => set(t.team, "note", e.target.value)} /></td>
+      </tr>`)}</tbody></table>
+  </div>`;
+}
+
+function BoardView({ code }) {
+  const [b, setB] = useState(null);
+  useEffect(() => {
+    run(() => A(`/teams/${code}/board`)).then(setB);
+  }, [code]);
+  if (!b) return html`<p class="small muted">Loading board…</p>`;
+  const byId = Object.fromEntries(b.cards.map((c) => [c.id, c]));
+  const label = (c) =>
+    !c ? "?" : c.kind === "evidence" ? `${c.record_id || c.passage_id}` : c.kind === "quote" ? `quote (${c.stakeholder_id})` : "note";
+  return html`<div class="col" style="margin-top:16px;gap:8px">
+    <div class="kicker">Evidence board · v${b.version} · ${b.cards.length} cards · ${b.links.length} links${b.updated_at ? " · saved " + ago(b.updated_at) : ""}</div>
+    ${b.cards.map((c) => html`<div class="alert">
+      <div class="tiny muted">${c.kind}${c.kind === "evidence" ? ` · ${c.passage_id}${c.record_title ? " · " + c.record_title : ""}` : ""}${c.kind === "quote" ? ` · ${c.stakeholder_id}` : ""}</div>
+      <div class="q">${c.text || ""}</div>
+    </div>`)}
+    ${b.links.length ? html`<div class="kicker" style="margin-top:8px">Links</div>
+      ${b.links.map((l) => html`<div class="small">${label(byId[l.from])} —${l.label || "linked"}→ ${label(byId[l.to])}</div>`)}` : null}
+  </div>`;
 }
 
 // ------------------------------------------------------------------ results
@@ -1564,6 +1648,7 @@ const TABS = [
   ["rounds", "Rounds", Rounds],
   ["teams", "Teams", Teams],
   ["results", "Results", Results],
+  ["leaderboard", "Leaderboard", Leaderboard],
   ["alliances", "Alliances", Alliances],
   ["submissions", "Submissions", Submissions],
   ["documents", "Documents", Documents],

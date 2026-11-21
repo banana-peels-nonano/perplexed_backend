@@ -6,8 +6,6 @@ Then open:     http://127.0.0.1:8000/docs   (interactive API page, generated fro
 
 from __future__ import annotations
 
-import logging
-import time
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -34,6 +32,7 @@ from app.content.store import ContentStore
 from app.live.hub import Hub
 from app.llm.anthropic_provider import AnthropicProvider
 from app.llm.base import LlmProvider
+from app.observability import RequestLogging, configure_logging
 
 API_PREFIX = "/api/v1"
 
@@ -45,33 +44,15 @@ def default_provider() -> LlmProvider | None:
 
 def create_app(provider: LlmProvider | None = None) -> FastAPI:
     """`provider` lets tests inject the fake; normally Claude, if a key is configured."""
+    settings = get_settings()
+    configure_logging(settings.log_level)
     app = FastAPI(title="PERPLEXED 2.0 backend", version="0.2.0")
     app.state.provider = provider if provider is not None else default_provider()
     app.state.content = ContentStore()
     app.state.hub = Hub()  # live notifications (app/live/hub.py)
     install_error_handlers(app)
 
-    # ponytail: one log line per API call (static files + /healthz skipped). Bounded by the
-    # docker log cap (5x10MB); at 50 teams expect ~10-20MB/day. Errors/slow -> WARNING.
-    reqlog = logging.getLogger("uvicorn.error")
-
-    @app.middleware("http")
-    async def request_log(request: Request, call_next):
-        path = request.url.path
-        if not path.startswith("/api/"):
-            return await call_next(request)
-        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "-")
-        t0 = time.perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception:
-            ms = (time.perf_counter() - t0) * 1000
-            reqlog.exception("REQ %s %s -> EXC %.0fms ip=%s", request.method, path, ms, ip)
-            raise
-        ms = (time.perf_counter() - t0) * 1000
-        level = logging.WARNING if response.status_code >= 400 or ms > 1000 else logging.INFO
-        reqlog.log(level, "REQ %s %s -> %d %.0fms ip=%s", request.method, path, response.status_code, ms, ip)
-        return response
+    app.add_middleware(RequestLogging, slow_ms=settings.log_slow_ms)
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(stakeholders.router, prefix=API_PREFIX)
     app.include_router(interview.router, prefix=API_PREFIX)

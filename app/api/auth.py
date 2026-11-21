@@ -26,11 +26,15 @@ class TeamOut(BaseModel):
 
 
 @router.post("/auth/login", response_model=TeamOut)
-async def login(body: LoginRequest, response: Response, session: DbSession) -> TeamOut:
+async def login(
+    body: LoginRequest, response: Response, session: DbSession, request: Request
+) -> TeamOut:
     settings = get_settings()
     team, token = await do_login(
         session, body.access_code, body.device_label, settings.session_ttl_hours
     )
+    request.state.actor = "team"
+    request.state.team_id = str(team.id)
     response.set_cookie(
         COOKIE_NAME,
         token,

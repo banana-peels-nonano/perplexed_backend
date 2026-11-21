@@ -29,13 +29,15 @@ def _body(code: str, message: str, details: dict[str, Any] | None = None) -> dic
 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
-    async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
+    async def _api_error(request: Request, exc: ApiError) -> JSONResponse:
+        request.state.error_code = exc.code
         return JSONResponse(
             status_code=exc.status, content=_body(exc.code, exc.message, exc.details)
         )
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+    async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        request.state.error_code = "INVALID_REQUEST"
         # malformed request bodies get the same shape as every other error. Only type,
         # location and message: pydantic's `ctx` can hold exception objects (not JSON), and
         # `input` would echo the whole body back (step 9: a board rule's ValueError crashed

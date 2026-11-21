@@ -40,6 +40,8 @@ async def get_team_context(request: Request, session: DbSession) -> TeamContext:
     team = await team_from_token(session, token)
     if team is None:
         raise ApiError(401, "UNAUTHENTICATED", "session expired or logged out; log in again")
+    request.state.actor = "team"
+    request.state.team_id = str(team.team_id)
     return team
 
 

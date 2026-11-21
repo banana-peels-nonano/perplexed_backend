@@ -89,6 +89,7 @@ _bearer = HTTPBearer(auto_error=False, scheme_name="Organiser token", descriptio
 
 def require_admin(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    request: Request,
 ) -> None:
     token = get_settings().admin_token
     if token is None:
@@ -97,6 +98,7 @@ def require_admin(
         creds.credentials.encode(), token.get_secret_value().encode()
     ):
         raise ApiError(401, "ADMIN_UNAUTHENTICATED", "organiser token missing or wrong")
+    request.state.actor = "admin"
 
 
 router = APIRouter(prefix="/admin", tags=["organisers"], dependencies=[Depends(require_admin)])
@@ -449,6 +451,7 @@ async def patch_state(
     code: str, stakeholder_id: str, body: StatePatch, session: DbSession, request: Request
 ) -> StakeholderStateOut:
     team = await _team(session, code)
+    request.state.target_team_id = str(team.id)
     state = await session.get(TSS, (team.id, stakeholder_id))
     if state is None:
         raise ApiError(404, "NOT_FOUND", f"team {code} has no stakeholder {stakeholder_id!r}")
@@ -543,6 +546,7 @@ async def register_teams(body: TeamsIn, session: DbSession) -> list[NewTeamOut]:
 async def rotate_access_code(code: str, session: DbSession, request: Request) -> NewTeamOut:
     """A lost or leaked card: new code, and every laptop of the team is logged out."""
     team = await _team(session, code)
+    request.state.target_team_id = str(team.id)
     access_code = generate_access_code()
     team.access_code_hash = hash_access_code(access_code)
     team.access_code = access_code
@@ -631,6 +635,7 @@ async def set_team_company(
     code: str, body: CompanyIn, session: DbSession, request: Request
 ) -> dict:
     team = await _team(session, code)
+    request.state.target_team_id = str(team.id)
     if body.company is not None and await session.get(Company, body.company) is None:
         raise ApiError(404, "NOT_FOUND", f"no company {body.company!r}")
     if team.company_id != body.company and team.id in await _active_team_ids(session):
@@ -656,6 +661,7 @@ async def give_time(code: str, body: TimeIn, session: DbSession, request: Reques
     """Extra time for one team in the current phase (their laptop crashed, the wifi died).
     Their countdown and interview gate move; nobody else's does."""
     team = await _team(session, code)
+    request.state.target_team_id = str(team.id)
     phase = await _active(session)
     if phase.planned_seconds == 0:
         raise ApiError(409, "PHASE_UNTIMED", "this phase has no timer")

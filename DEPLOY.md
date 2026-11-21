@@ -53,28 +53,26 @@ organiser token.
 
 ## Manual deploy and redeploy
 
-From your local checkout, use the SSH alias `Tevaj` to inspect and sync the project files
-to `/opt/perplexed`. Install `rsync` on both machines before syncing.
+`/opt/perplexed` on the server is a git checkout of this repository. Changes reach the
+server only through `main`: push to `main` from your machine, then pull and rebuild on the
+server by hand.
 
 ```bash
-sh deploy/sync.sh --inspect
-sh deploy/sync.sh
-sh deploy/sync.sh --apply
+# on your machine
+git push origin main
+
+# on the server
+cd /opt/perplexed
+git pull --ff-only
+cd deploy
+docker compose --env-file .env -f compose.prod.yaml up -d --build --wait app
 ```
 
-The middle command is a dry run. The script copies tracked files and new files that Git
-doesn't ignore, using their current working tree contents. This includes docs, tests,
-dotfiles and local changes. It preserves server-only files, including `deploy/.env` and
-case data. Git metadata stays local, and the Docker volumes are outside the sync.
-
-After the sync, SSH in and rebuild manually:
-
-```bash
-ssh Tevaj
-cd /opt/perplexed/deploy
-docker compose --env-file .env -f compose.prod.yaml down
-docker compose --env-file .env -f compose.prod.yaml up -d --build --wait
-```
+`git pull` never touches `deploy/.env`, `content/` or `deploy/backups/` (all git-ignored).
+Rebuild only the `app` service: it leaves PostgreSQL running. Don't run
+`docker compose ... down` for a redeploy; it stops and recreates the database container
+too, and every request fails until it is back. Never redeploy while a round is running:
+the restart drops every team's live connection.
 
 Keep one app replica because live updates use an in-memory registry. The container runs
 database migrations on startup. To update case content, replace `content/case.toml` and

@@ -22,7 +22,7 @@ chmod 600 .env
 Set `POSTGRES_PASSWORD`, `ADMIN_TOKEN`, and `ANTHROPIC_API_KEY` in `.env`. For a new
 database, `openssl rand -hex 24` generates a suitable database password; generate a
 separate strong organiser token. For an existing database, keep its current password.
-SMTP and Gemini are not used for the event. Compose gives exported shell variables
+Gemini is not used for the event. Compose gives exported shell variables
 precedence over `.env`, so keep deployment settings in the file and unset any
 conflicting exports before running Compose.
 

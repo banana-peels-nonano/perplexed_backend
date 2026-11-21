@@ -43,6 +43,7 @@ from app.interview.trust import clamp, judge, rules
 from app.llm.base import LlmProvider, LlmResult, ProviderError
 from app.llm.pricing import cost_usd
 from app.models import (
+    Document,
     HrFlag,
     LlmCall,
     Message,
@@ -176,6 +177,25 @@ async def _replay(
         questions_remaining=state.quota - state.questions_used,
         kind="hr_notice" if answer.role == "notice" else "answer",
     )
+
+
+async def _withheld_records(session: AsyncSession, team: TeamContext) -> set[str]:
+    """Records that have a handout which hasn't reached this team yet (same rule as the
+    documents list: released by hand or by its round, and meant for this team)."""
+    linked, given = set(), set()
+    rows = await session.execute(
+        select(Document.record_id, Document.released_at, Document.company_id,
+               Document.team_ids, Phase.started_at)
+        .outerjoin(Phase, Phase.id == Document.phase_id)
+        .where(Document.record_id.is_not(None))
+    )  # fmt: skip
+    for rid, released, company, team_ids, started in rows.all():
+        linked.add(rid)
+        if ((released is not None or started is not None)
+                and company in (None, team.company_id)
+                and (team_ids is None or team.team_id in team_ids)):  # fmt: skip
+            given.add(rid)
+    return linked - given
 
 
 async def _disclosed_modes(session: AsyncSession, team: TeamContext) -> dict[str, Mode]:
@@ -330,6 +350,7 @@ async def ask_question(
         ).all()
         disclosed_modes = await _disclosed_modes(session, team)
         disclosed = set(disclosed_modes)
+        withheld = await _withheld_records(session, team)
         walked_out_before = bool(
             await session.scalar(
                 select(func.count()).where(*_thread(team, stakeholder_id), Message.role == "notice")
@@ -388,6 +409,7 @@ async def ask_question(
                 phase=phase.key,
                 disclosed=disclosed,
                 phase_order=phase_order,
+                withheld_records=withheld,
             ),
         )
         ranked = rank_passages(

@@ -676,10 +676,9 @@ function Login() {
           ${busy ? "Checking…" : "Enter →"}
         </button>
         <p class="small muted">
-          Up to two laptops per team. Your code was emailed to every member;
+          Up to two laptops per team. Your code is given to you by the organisers;
           keep it to yourselves.
         </p>
-        <a class="small" href="/register">No code yet? Register your team →</a>
       </form>
     </section>
   </div>`;

@@ -9,7 +9,6 @@ async def test_portal_console_and_display_pages_are_served(seeded, make_client):
         ("/", "app.js"),
         ("/console", "console.js"),
         ("/display", "display.js"),
-        ("/register", "register.js"),
     ):
         r = await client.get(path)
         assert r.status_code == 200 and f'src="{script}"' in r.text, path

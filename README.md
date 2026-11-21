@@ -59,10 +59,10 @@ uvicorn app.main:app --reload             # API docs at http://127.0.0.1:8000/do
 ```
 
 For the event, organisers create teams and access codes in the console's **Teams** tab.
-Codes are shown once; download the CSV before closing the dialog. Only hashes are stored.
-The public self-registration and SMTP email paths remain in the codebase but are not part
-of the event workflow; SMTP is disabled. Re-seeding keeps existing codes unless you pass
-`--rotate-codes`.
+Each team's code stays visible in the Teams table (and in **Download codes CSV**) so
+organisers can read it out; login still checks a hash, and a plain copy is kept for the
+console (migration 0011). There is no self-registration or email. Re-seeding keeps
+existing codes unless you pass `--rotate-codes`.
 
 ## Checks
 
@@ -100,8 +100,6 @@ Add `--fake` to the first two to run without API calls.
 | GET    | `/api/v1/brief`                       | the case brief and the team's company brief                                           |
 | GET    | `/api/v1/announcements`               | organiser broadcasts for this team                                                    |
 | GET    | `/api/v1/display`                     | no login: the projector page (phase, clock, public broadcasts)                        |
-| GET    | `/api/v1/registration`                | legacy self-registration rules endpoint; not used for the event                      |
-| POST   | `/api/v1/registration`                | legacy self-registration endpoint; SMTP delivery is disabled for the event           |
 | WS     | `/api/v1/ws`                          | live "what changed" notifications for the team's open tabs                            |
 
 Errors are always `{"error": {"code", "message", "details"}}`. Another company's
@@ -154,7 +152,6 @@ serves it, so the browser sees one origin and the session cookie just works.
 | `/`         | team portal: login, brief, people (badges), interviews, evidence, board, documents, rounds |
 | `/console`  | organiser console (asks for `ADMIN_TOKEN`; kept in that tab only)                          |
 | `/display`  | projector page: round, clock, public announcements (no login)                              |
-| `/register` | legacy self-sign-up page; not used for event credential distribution                       |
 
 Edit a file in `web/`, refresh the browser. Pages are sent with a strict
 Content-Security-Policy (scripts only from this server, no inline scripts).

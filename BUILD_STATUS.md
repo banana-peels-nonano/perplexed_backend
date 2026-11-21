@@ -82,7 +82,7 @@ Full reasoning for each is kept in the engineering dossier (D-001 to D-023).
 | Submissions                       | Done                 | Audit Findings Sheet: every version kept, server-side deadline, citations incl. partner evidence, cross-company rule                                                                                                                            |
 | Portraits and login art           | Done                 | flat colour-block stakeholder portraits from each `look` in the case file (fallback from the id); isometric pixel-art login scene in place of the scanline "?"                                                                                  |
 | Records tab                       | Done                 | organisers switch it live: off (default), titles only, or full documents (then citable; partner company's after an alliance locks); "in confidence" records and deleted text never shown                                                        |
-| Event credentials                 | Done                 | Organisers create teams and generate one-time access codes in Console → Teams; codes can be downloaded as CSV and rotated; SMTP is disabled for event operations |
+| Event credentials                 | Done                 | Organisers create teams and generate one-time access codes in Console → Teams; codes stay visible in the Teams table, download as CSV and can be rotated; email/self-registration removed |
 | Judging                           | Pending              | judges read sheets in the console; scoring form not built                                                                                                                                                                                       |
 | Frontend                          | Done (first version) | `web/`: team portal, organiser console, projector page; served by the backend                                                                                                                                                                   |
 | Production deployment             | In use               | Manually deployed with Docker Compose as a single replica; secrets are managed in `deploy/.env`; no backup workflow is configured |
@@ -129,5 +129,5 @@ These must be re-measured on the real case.
 - Provider rate limits for the event key.
 
 Production is deployed manually with Docker Compose as a single replica. Deployment
-secrets are managed in `deploy/.env`; SMTP, Gemini failover, and database backups are not
-part of the event setup. See `DEPLOY.md`.
+secrets are managed in `deploy/.env`; Gemini failover and database backups are not part of
+the event setup. See `DEPLOY.md`.

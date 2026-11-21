@@ -93,7 +93,9 @@ class Team(Base):
     code: Mapped[str] = mapped_column(Text, unique=True)  # printed on the team's card
     name: Mapped[str] = mapped_column(Text)
     company_id: Mapped[str | None] = mapped_column(ForeignKey("company.id"), index=True)
-    access_code_hash: Mapped[str] = mapped_column(Text)  # never the code itself
+    access_code_hash: Mapped[str] = mapped_column(Text)  # login checks this
+    # plain copy so organisers can read it out (no email); None for codes made before 0011
+    access_code: Mapped[str | None] = mapped_column(Text)
     max_sessions: Mapped[int] = mapped_column(Integer, server_default=sql_text("2"))
     created_at: Mapped[datetime] = _created_at()
 
@@ -313,6 +315,8 @@ class Document(Base):
     data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)  # file kind
     size_bytes: Mapped[int] = mapped_column(Integer, server_default=sql_text("0"))
     company_id: Mapped[str | None] = mapped_column(ForeignKey("company.id"))
+    # the case record this file IS. Until it reaches a team, its stakeholders stay at "aware"
+    record_id: Mapped[str | None] = mapped_column(ForeignKey("record.id"))
     team_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)))
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created_at()

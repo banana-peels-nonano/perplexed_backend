@@ -727,6 +727,7 @@ function TeamDetail({ t, onClose }) {
 }
 
 // ------------------------------------------------------------------ leaderboard
+const CRITERIA = [["accuracy", "Accuracy", 4], ["reasoning", "Reasoning", 3], ["recommendations", "Recs", 2], ["clarity", "Clarity", 1]];
 function Leaderboard() {
   const { phases } = useStore(C);
   const [round, setRound] = useState("");
@@ -738,31 +739,45 @@ function Leaderboard() {
   useEffect(() => {
     if (!round && phases.length) setRound(phases[0].key);
   }, [phases]);
-  const set = (team, field, v) =>
-    setEdits((e) => ({ ...e, [team]: { ...e[team], [field]: v } }));
-  const save = async () => {
-    const rows = lb?.teams || [];
-    const entries = Object.entries(edits).map(([team, e]) => {
-      const r = rows.find((x) => x.team === team) || {};
-      const pts = e.points ?? r.rounds?.[round];
-      return {
-        team,
-        points: pts === "" || pts == null ? null : Number(pts),
-        note: e.note ?? r.notes?.[round] ?? "",
-      };
+  const cur = (t) => ({
+    points: t.rounds?.[round] ?? "",
+    note: t.notes?.[round] ?? "",
+    breakdown: t.breakdowns?.[round] || {},
+    ...edits[t.team],
+  });
+  const set = (t, patch) =>
+    setEdits((e) => {
+      const next = { ...cur(t), ...patch };
+      if (patch.breakdown) {
+        const vals = Object.values(next.breakdown).filter((v) => v !== "" && v != null);
+        if (vals.length) next.points = vals.reduce((x, y) => x + Number(y), 0);
+      }
+      return { ...e, [t.team]: next };
     });
+  const save = async () => {
+    const entries = Object.entries(edits).map(([team, e]) => ({
+      team,
+      points: e.points === "" || e.points == null ? null : Number(e.points),
+      note: e.note || "",
+      breakdown: Object.fromEntries(Object.entries(e.breakdown || {}).filter(([, v]) => v !== "" && v != null).map(([k, v]) => [k, Number(v)])),
+    }));
     if (!entries.length) return toast("Nothing changed.");
     if (await run(() => A(`/phases/${round}/scores`, { method: "PUT", body: { entries } }), "Scores saved — leaderboard updated")) {
       setEdits({});
       reload();
     }
   };
+  const teams = lb?.teams || [];
+  const scored = teams.filter((t) => t.rounds?.[round] != null);
+  const stat = (vals) => vals.length ? `avg ${(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)} · min ${Math.min(...vals)} · max ${Math.max(...vals)}` : "—";
+  const buckets = Array.from({ length: 11 }, (_, i) => scored.filter((t) => Math.floor(t.rounds[round]) === i || (i === 10 && t.rounds[round] > 10)).length);
+  const peak = Math.max(1, ...buckets);
   return html`<div class="col" style="gap:20px">
     <h1 class="hero-title" style="font-size:34px">Leaderboard</h1>
-    <p class="small muted" style="margin:0;max-width:640px">
-      Enter points for a round and save: every team's Rounds page updates at
-      once. Totals add up all rounds. Notes are for organisers only. Clear a box
-      to remove that score.
+    <p class="small muted" style="margin:0;max-width:680px">
+      Pick a round, edit any score, save: every team's Rounds page updates at once.
+      Filling the criteria adds them up into the points (you can still overwrite the points).
+      Criteria and feedback are for organisers only. Clear the points to remove a score.
     </p>
     <div class="row" style="flex-wrap:wrap">
       <select class="select" style="max-width:240px" value=${round} onChange=${(e) => { setRound(e.target.value); setEdits({}); }}>
@@ -770,20 +785,39 @@ function Leaderboard() {
       </select>
       <button class="btn small" onClick=${save}>Save scores (${Object.keys(edits).length})</button>
     </div>
+    <div class="alert">
+      <div class="kicker">Distribution · ${round} · ${scored.length} scored</div>
+      <div class="small">Total: ${stat(scored.map((t) => t.rounds[round]))}</div>
+      ${CRITERIA.map(([k, l, max]) => html`<div class="small">${l} (/${max}): ${stat(scored.map((t) => t.breakdowns?.[round]?.[k]).filter((v) => v != null))}</div>`)}
+      <div style="display:flex;gap:4px;align-items:flex-end;height:70px;margin-top:10px">
+        ${buckets.map((n, i) => html`<div style="flex:1;text-align:center" title=${`${n} team(s) scored ${i}${i === 10 ? "+" : "–" + (i + 0.5)}`}>
+          <div style=${`background:var(--fg,#444);opacity:.7;height:${(n / peak) * 50}px`}></div>
+          <div class="tiny muted">${i}</div>
+        </div>`)}
+      </div>
+    </div>
     <table class="t"><thead><tr><th>#</th><th>Team</th><th>Co.</th>
       ${(lb?.rounds || []).map((r) => html`<th>${r.name}</th>`)}
-      <th>Total</th><th>${round} points</th><th>Note</th></tr></thead>
-      <tbody>${(lb?.teams || []).map((t) => html`<tr>
-        <td>${t.rank}</td><td>${t.team} · ${t.name}</td><td>${t.company || "—"}</td>
-        ${(lb?.rounds || []).map((r) => html`<td>${t.rounds[r.key] ?? "—"}</td>`)}
-        <td><b>${t.total}</b></td>
-        <td><input class="input" style="width:80px" type="number" step="0.5"
-          value=${edits[t.team]?.points ?? t.rounds?.[round] ?? ""}
-          onInput=${(e) => set(t.team, "points", e.target.value)} /></td>
-        <td><input class="input" style="min-width:200px"
-          value=${edits[t.team]?.note ?? t.notes?.[round] ?? ""}
-          onInput=${(e) => set(t.team, "note", e.target.value)} /></td>
-      </tr>`)}</tbody></table>
+      <th>Total</th>
+      ${CRITERIA.map(([, l, max]) => html`<th>${l} /${max}</th>`)}
+      <th>${round} pts</th></tr></thead>
+      <tbody>${teams.map((t) => {
+        const c = cur(t);
+        return html`<tr>
+          <td>${t.rank}</td><td>${t.team} · ${t.name}</td><td>${t.company || "—"}</td>
+          ${(lb?.rounds || []).map((r) => html`<td>${t.rounds[r.key] ?? "—"}</td>`)}
+          <td><b>${t.total}</b></td>
+          ${CRITERIA.map(([k, , max]) => html`<td><input class="input" style="width:60px" type="number" step="0.5" min="0" max=${max}
+            value=${c.breakdown[k] ?? ""}
+            onInput=${(e) => set(t, { breakdown: { ...c.breakdown, [k]: e.target.value } })} /></td>`)}
+          <td><input class="input" style="width:70px" type="number" step="0.5" value=${c.points}
+            onInput=${(e) => set(t, { points: e.target.value })} /></td>
+        </tr>
+        <tr><td></td><td colspan="99">
+          <textarea class="input" rows="2" style="width:100%" placeholder="Feedback (organisers only)"
+            value=${c.note} onInput=${(e) => set(t, { note: e.target.value })}></textarea>
+        </td></tr>`;
+      })}</tbody></table>
   </div>`;
 }
 

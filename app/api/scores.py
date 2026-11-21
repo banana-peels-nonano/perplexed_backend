@@ -32,7 +32,8 @@ class ScoreEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
     team: str
     points: Decimal | None = Field(default=None, ge=-1000, le=1000)  # None: clear the score
-    note: str = Field(default="", max_length=2000)
+    note: str = Field(default="", max_length=4000)  # feedback, organisers only
+    breakdown: dict[str, float] = Field(default_factory=dict, max_length=12)  # criterion: points
 
 
 class ScoresIn(BaseModel):
@@ -50,12 +51,15 @@ async def _leaderboard(session) -> dict:
         )
     ).all()
     scores: dict = {}
-    for team_id, phase_id, points, note in (
+    for team_id, phase_id, points, note, breakdown in (
         await session.execute(
-            select(TeamScore.team_id, TeamScore.phase_id, TeamScore.points, TeamScore.note)
+            select(
+                TeamScore.team_id, TeamScore.phase_id, TeamScore.points, TeamScore.note,
+                TeamScore.breakdown,
+            )
         )
     ).all():
-        scores.setdefault(team_id, {})[phase_id] = (points, note)
+        scores.setdefault(team_id, {})[phase_id] = (points, note, breakdown)
     key = {pid: k for pid, k, _ in phases}
     rows = []
     for t in (await session.scalars(select(Team).order_by(Team.code))).all():
@@ -65,9 +69,10 @@ async def _leaderboard(session) -> dict:
                 "team": t.code,
                 "name": t.name,
                 "company": t.company_id,
-                "total": float(sum((p for p, _ in mine.values()), Decimal(0))),
-                "rounds": {key[pid]: float(p) for pid, (p, _) in mine.items() if pid in key},
-                "notes": {key[pid]: n for pid, (_, n) in mine.items() if pid in key and n},
+                "total": float(sum((v[0] for v in mine.values()), Decimal(0))),
+                "rounds": {key[pid]: float(v[0]) for pid, v in mine.items() if pid in key},
+                "notes": {key[pid]: v[1] for pid, v in mine.items() if pid in key and v[1]},
+                "breakdowns": {key[pid]: v[2] for pid, v in mine.items() if pid in key and v[2]},
             }
         )
     rows.sort(key=lambda r: (-r["total"], r["team"]))
@@ -102,7 +107,9 @@ async def set_scores(key: str, body: ScoresIn, session: DbSession, request: Requ
         if e.points is None:
             await session.execute(delete(TeamScore).where(*where))
             continue
-        values = {"points": e.points, "note": e.note.strip(), "updated_at": now}
+        values = {
+            "points": e.points, "note": e.note.strip(), "breakdown": e.breakdown, "updated_at": now
+        }
         await session.execute(
             pg_insert(TeamScore)
             .values(team_id=ids[e.team], phase_id=phase.id, **values)
@@ -151,5 +158,6 @@ async def leaderboard(team: CurrentTeam, session: DbSession) -> dict:
     lb = await _leaderboard(session)
     for r in lb["teams"]:  # teams don't see organisers' notes or who is in which company
         r.pop("notes")
+        r.pop("breakdowns")
         r.pop("company")
     return lb

@@ -5,6 +5,7 @@ Revises: 0012
 """
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 
 from alembic import op
 
@@ -21,6 +22,7 @@ def upgrade() -> None:
         sa.Column("phase_id", sa.Uuid(), sa.ForeignKey("phase.id"), primary_key=True),
         sa.Column("points", sa.Numeric(8, 2), nullable=False),
         sa.Column("note", sa.Text(), server_default="", nullable=False),
+        sa.Column("breakdown", JSONB(), server_default=sa.text("'{}'"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
 

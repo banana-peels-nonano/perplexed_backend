@@ -437,5 +437,6 @@ class TeamScore(Base):
     team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("team.id"), primary_key=True)
     phase_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("phase.id"), primary_key=True)
     points: Mapped[Decimal] = mapped_column(Numeric(8, 2))
-    note: Mapped[str] = mapped_column(Text, server_default=sql_text("''"))
+    note: Mapped[str] = mapped_column(Text, server_default=sql_text("''"))  # feedback
+    breakdown: Mapped[dict] = mapped_column(JSONB, server_default=sql_text("'{}'"))  # criterion: points
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

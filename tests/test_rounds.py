@@ -205,15 +205,15 @@ async def test_scores_move_the_leaderboard_and_boards_are_visible(seeded, make_c
     a01 = await _login(make_client, seeded["A01"])
     r = await org.put(
         f"{API}/admin/phases/round2/scores",
-        json={"entries": [{"team": "A01", "points": 7.5, "note": "tidy"}, {"team": "B01", "points": 9}]},
+        json={"entries": [{"team": "A01", "points": 7.5, "note": "tidy", "breakdown": {"accuracy": 3.5, "clarity": 1}}, {"team": "B01", "points": 9}]},
         headers=AUTH,
     )
     assert r.status_code == 200, r.text
     lb = (await a01.get(f"{API}/leaderboard")).json()
     assert [(t["team"], t["rank"], t["total"]) for t in lb["teams"][:2]] == [("B01", 1, 9.0), ("A01", 2, 7.5)]
-    assert "notes" not in lb["teams"][0] and lb["rounds"][0]["key"] == "round2"
+    assert "notes" not in lb["teams"][0] and "breakdowns" not in lb["teams"][0] and lb["rounds"][0]["key"] == "round2"
     admin_lb = (await org.get(f"{API}/admin/leaderboard", headers=AUTH)).json()
-    assert next(t for t in admin_lb["teams"] if t["team"] == "A01")["notes"] == {"round2": "tidy"}
+    assert next(t for t in admin_lb["teams"] if t["team"] == "A01")["breakdowns"] == {"round2": {"accuracy": 3.5, "clarity": 1}}
     await org.put(f"{API}/admin/phases/round2/scores", json={"entries": [{"team": "B01", "points": None}]}, headers=AUTH)
     lb = (await a01.get(f"{API}/leaderboard")).json()
     assert lb["teams"][0]["team"] == "A01"

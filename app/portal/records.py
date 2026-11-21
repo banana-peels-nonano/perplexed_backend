@@ -19,7 +19,7 @@ import uuid
 from sqlalchemy import select
 
 from app.content.store import current_event
-from app.models import Passage, Record, Team
+from app.models import Company, Passage, Record, Team
 
 MODES = ("off", "titles", "full")
 HIDDEN_KINDS = ("interview",)
@@ -55,9 +55,13 @@ async def tab_passage_ids(session, companies) -> set[str]:
 
 
 async def tab_companies(session, team_id: uuid.UUID, partners: list[uuid.UUID]) -> list[str]:
-    """The team's company first, then its locked partners' companies."""
+    """The team's company first, then its locked partners' companies (or, when organisers
+    open records_tab.all_companies, every company)."""
     own = await session.scalar(select(Team.company_id).where(Team.id == team_id))
     out = [own] if own else []
+    if out and (await current_event(session)).config.get("records_tab", {}).get("all_companies"):
+        out += [c for c in await session.scalars(select(Company.id).order_by(Company.id)) if c != own]
+        return out
     if partners:
         for c in await session.scalars(select(Team.company_id).where(Team.id.in_(partners))):
             if c and c not in out:

@@ -901,6 +901,7 @@ class RegistrationRules(BaseModel):
 class RecordsTab(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["off", "titles", "full"]
+    all_companies: bool = False  # true: every team sees every company's records
 
 
 class ConfigPatch(BaseModel):

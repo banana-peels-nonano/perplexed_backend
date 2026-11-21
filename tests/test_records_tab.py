@@ -82,3 +82,12 @@ async def test_interview_records_never_show_and_partners_share_after_lock(
 
     await _mode(org, "off")
     assert (await a01.get(f"{API}/records")).json()["records"] == []
+
+
+async def test_all_companies_opens_every_companys_records(seeded, make_client, admin_on):
+    org = make_client()
+    a01 = await _login(make_client, seeded["A01"])
+    await org.patch(f"{API}/admin/config", json={"records_tab": {"mode": "full", "all_companies": True}}, headers=AUTH)
+    r = await a01.get(f"{API}/records")
+    assert r.status_code == 200, r.text
+    assert len({x["company_id"] for x in r.json()["records"]}) > 1, r.json()

@@ -1,8 +1,9 @@
 # Running the event: organiser API
 
-Everything organisers do goes through `/api/v1/admin/*` with the organiser token. Until
-an organiser screen exists, these `curl` commands are the controls. The token is
-`ADMIN_TOKEN` in the server's `.env`; with it unset, the organiser API doesn't exist.
+Everything organisers do goes through `/api/v1/admin/*` with the organiser token. Use the
+browser console at `/console` for normal event operations; the `curl` examples below are
+also available for direct API use. The token is `ADMIN_TOKEN` in `deploy/.env`; with it
+unset, the organiser API doesn't exist.
 
 ```bash
 export PX=http://127.0.0.1:8000/api/v1/admin      # the event server's address on the day
@@ -11,49 +12,24 @@ export AUTH="Authorization: Bearer $ADMIN_TOKEN"
 
 Never paste the token into a participant-facing screen or a shared chat.
 
-**In a browser instead:** open `/docs` on the server (locally <http://127.0.0.1:8000/docs>),
-click **Authorize**, paste the token, then use any endpoint under `organisers` with
-"Try it out". The token stays in that tab until you close it or log out in the dialog.
+**For direct API use in a browser:** open `/docs` on the server, click **Authorize**, paste
+the token, then use any endpoint under `organisers` with "Try it out". The token stays in
+that tab until you close it or log out in the dialog.
 
-## Before the event: registration
+## Before the event: create teams and credentials
 
-Teams sign themselves up at `/register`: a team name and 2–4 members, every address on
-`@thapar.edu`, each person in one team only. One email goes to all members with the team's
-shared access code. The code is never shown on screen, so a team that mistyped an address
-gets nothing: fix it with Remove + register again, or Resend after correcting it in the DB.
+SMTP is disabled. Organisers create accounts and manage access codes in the console's
+**Teams** tab; do not use `/register` or the **Registration** tab for event onboarding.
+Enter one team name per line and select **Register**. The console displays the generated
+access codes once. Download the CSV immediately and distribute each team's code securely.
+The database stores only code hashes, so a lost code must be rotated and redistributed.
 
-Console → **Registration**: open/close sign-ups, change the team size or domain, see every
-team with its members and the outcome of its last email (`sent`, `failed` with the error on
-hover, `not_configured`), **Resend code** (new code, the old one stops working, laptops are
-logged out), **Remove** (only before the team has asked anything).
-
-Email needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` in the
-server's `deploy/.env` (and `PUBLIC_URL`, the link printed in the email). Without them
-teams still register; the console says email isn't set up, and Resend works once it is.
-
-| Sender            | Limit                                  | Setup                                                                                |
-| ----------------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
-| New Gmail account | 500 recipients a day                   | 2-step verification on, then an app password (16 letters, no spaces)                 |
-| Brevo free        | 300 sends a day, counted per recipient | account must be approved for sending; SMTP key from the dashboard; verify the sender |
-
-Both count every recipient, not every email. 150 teams × 3–4 members is 450–600 recipients,
-so with Gmail keep registration open for at least two days (or in waves). Resends count too.
-If the limit is hit, emails show `failed`; Resend them the next day.
+The **Teams** tab also lets organisers create a replacement access code. Rotation disables
+the previous code and logs out that team's active sessions. Remove a team only before it
+has event activity. After creating teams, assign companies as described below.
 
 ```bash
-curl -s -H "$AUTH" -X PATCH $PX/config -H 'Content-Type: application/json' \
-  -d '{"registration": {"open": true, "min_members": 2, "max_members": 4}}'
-curl -s -H "$AUTH" $PX/registrations              # teams, members, last email
-curl -s -H "$AUTH" -X POST $PX/teams/T004/resend   # new code, emailed again
-curl -s -H "$AUTH" -X DELETE $PX/teams/T004        # remove a mistaken sign-up
-```
-
-Then deal companies (below) once registration closes.
-
-## Before the event: teams
-
-```bash
-# register teams (codes T001, T002, ...); access codes are shown ONCE: print the cards now
+# create teams and one-time access codes from Console → Teams; download the CSV immediately
 curl -s -H "$AUTH" -X POST $PX/teams -H 'Content-Type: application/json' \
   -d '{"names": ["Team Alpha", "Team Beta", "Team Gamma"]}'
 
@@ -63,9 +39,13 @@ curl -s -H "$AUTH" -X POST $PX/teams/assign-companies -H 'Content-Type: applicat
 # move one team by hand (refused once it has interviewed anyone)
 curl -s -H "$AUTH" -X PUT $PX/teams/T004/company -H 'Content-Type: application/json' -d '{"company": "B"}'
 
-# a team lost its card: new code, and its laptops are logged out
+# a team lost its code: new code, and its laptops are logged out
 curl -s -H "$AUTH" -X POST $PX/teams/T004/access-code
 ```
+
+Treat the response from team creation or code rotation as a secret: it contains the
+one-time plaintext code. SMTP-backed self-registration routes remain in the codebase but
+are outside the event workflow.
 
 `assign-companies` with `"only_unassigned": false` re-deals every team that hasn't asked
 a question yet. The same `seed` gives the same draw, so you can rerun it in front of the

@@ -1,8 +1,9 @@
 # Deploying PERPLEXED 2.0
 
-The production Compose project runs the app, Postgres, and backups. The server's
-shared Caddy serves `perplexed.saturnalia.in` over HTTPS on the external Docker
-network `web`.
+Production is deployed manually with Docker Compose as one app replica and one
+PostgreSQL service. The server's shared Caddy serves `perplexed.saturnalia.in` over HTTPS
+on the external Docker network `web`. Keep secrets in `deploy/.env`. Database backups are
+not configured; PostgreSQL data persists in the named Docker volume only.
 
 ## First deploy
 
@@ -18,10 +19,10 @@ cd deploy
 chmod 600 .env
 ```
 
-Set `POSTGRES_PASSWORD` and `ADMIN_TOKEN` in `.env`. For a new database,
-`openssl rand -hex 24` generates a suitable value for each. For an existing
-database, use its current password. Set the event API key and fill in the SMTP
-settings if teams will register by email. Compose gives exported shell variables
+Set `POSTGRES_PASSWORD`, `ADMIN_TOKEN`, and `ANTHROPIC_API_KEY` in `.env`. For a new
+database, `openssl rand -hex 24` generates a suitable database password; generate a
+separate strong organiser token. For an existing database, keep its current password.
+SMTP and Gemini are not used for the event. Compose gives exported shell variables
 precedence over `.env`, so keep deployment settings in the file and unset any
 conflicting exports before running Compose.
 
@@ -50,25 +51,15 @@ docker compose --env-file .env -f compose.prod.yaml exec -T app python -m app.se
 Check `https://perplexed.saturnalia.in/healthz`, then open `/console` with the
 organiser token.
 
-## Manual redeploy
+## Manual deploy and redeploy
 
-Pull the desired revision and run the same `up` command from `deploy/`. Keep a
-single app process because live updates use an in-memory registry. To update
-case content, replace `content/case.toml` and reload it from the organiser console.
+Pull the desired revision and run the same `up` command from `deploy/`. Do not scale the
+app service: live updates use an in-memory registry and the deployment is single replica.
+The container runs database migrations on startup. To update case content, replace
+`content/case.toml` and reload it from the organiser console.
 
-### Backups
-
-`deploy/backups/` gets a compressed dump every 5 minutes; the newest 288 (24 hours) are kept.
-Copy one off the server now and then (`scp`). To restore one:
-
-```bash
-docker compose -f compose.prod.yaml stop app
-gunzip -c backups/perplexed-<stamp>.sql.gz | docker compose -f compose.prod.yaml exec -T db psql -U perplexed perplexed
-docker compose -f compose.prod.yaml start app
-```
-
-(Restore into an empty database: `docker compose ... down`, remove the `perplexed_pgdata`
-volume, `up -d db`, then the `gunzip | psql` line.)
+The Compose deployment does not include a backup or restore workflow. The named database
+volume survives ordinary container recreation, but it is not a backup.
 
 ## Free staging on Render (optional, not for the event)
 

@@ -205,15 +205,14 @@ The current case (Northfield) is a **placeholder**; the real case arrives Monday
 hardcode stakeholder names, ids or counts: there are 3–5 stakeholders per company and 2
 companies, and everything comes from the API.
 
-## 10. Registration
+## 10. Event credentials
 
-`/register` (`web/register.js`) is the only page without a login. It reads
-`GET /api/v1/registration` for `open`, `min_members`, `max_members`, `domain`, and posts
-`{team_name, members: [{name, email}], website}` (`website` is a honeypot: a hidden field
-people never fill). The reply has `team_code`, `emailed_to`, `email_status`
-(`sent | failed | not_configured`), and **never the access code**: the page must not try
-to show one. Errors: `REGISTRATION_CLOSED`, `BAD_TEAM_SIZE`, `BAD_EMAIL` (`details.emails`),
-`EMAIL_TAKEN` (`details.emails`), `NAME_TAKEN`, `TOO_MANY_REGISTRATIONS` (429).
+For the event, organisers create teams in Console → **Teams**. The generated access codes
+are shown once and can be downloaded as a CSV; the organiser distributes them securely.
+The console can rotate a team's code, which invalidates the old code and logs out active
+sessions. SMTP is disabled, and the `/register` self-registration page is not part of the
+event workflow. The registration API and page remain in the codebase for the legacy
+self-registration flow.
 
 ## 11. Coming next
 

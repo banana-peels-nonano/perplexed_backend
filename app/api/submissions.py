@@ -165,8 +165,6 @@ async def save_submission(
             problems.append("add at least one finding")
         problems += [f"finding '{f.title or f.id}' has no title" for f in body.findings
                      if not f.title.strip()]  # fmt: skip
-        problems += [f"finding '{f.title or f.id}' cites no sources" for f in body.findings
-                     if not f.sources]  # fmt: skip
         if await _requires_cross(session, team.team_id):
             companies = dict(
                 (await session.execute(

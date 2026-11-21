@@ -40,7 +40,7 @@ class AskIn(BaseModel):
     # The frontend makes a new UUID per question and reuses it if it retries the SAME
     # question (e.g. after a network drop), so a retry never costs a second question.
     client_request_id: uuid.UUID
-    text: str = Field(min_length=1, max_length=1000)
+    text: str = Field(min_length=1, max_length=400)
 
 
 class EvidenceOut(BaseModel):

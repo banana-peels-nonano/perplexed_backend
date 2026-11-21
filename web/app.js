@@ -1126,7 +1126,7 @@ function Room({ sid }) {
                   </div>`
                 : html`<textarea
                       class="textarea"
-                      maxlength="1000"
+                      maxlength="400"
                       rows="2"
                       placeholder=${`Ask ${firstName(sh.name)} something…`}
                       value=${text}

@@ -53,7 +53,7 @@ Every error has the same shape. Switch on `code`, show `message`:
   and `look` (portrait art direction, `{}` when the case gives none). `web/lib.js`
   `Portrait` draws a flat SVG bust from it; `resolveLook()` fills gaps from the id.
 - `POST /stakeholders/{id}/questions` with `{"client_request_id": "<uuid>", "text": "..."}`
-  (text up to 1,000 characters).
+  (text up to 400 characters).
   - Generate a **new UUID per question** and **reuse it if you retry** the same question:
     a retry returns the original answer instead of charging again.
   - Answers take **3–5 seconds**. Show a "… is thinking" state rather than a spinner.

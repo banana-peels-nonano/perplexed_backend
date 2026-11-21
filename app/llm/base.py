@@ -51,9 +51,10 @@ class ProviderError(Exception):
     """The call failed. `retryable` says whether trying again later could help
     (timeouts, 429 rate limits, 5xx/529 overload) or not (bad request, bad key)."""
 
-    def __init__(self, message: str, *, retryable: bool):
+    def __init__(self, message: str, *, retryable: bool, status_code: int | None = None):
         super().__init__(message)
         self.retryable = retryable
+        self.status_code = status_code
 
 
 class LlmProvider(Protocol):

@@ -7,8 +7,9 @@ os.environ itself, so there is exactly one place that knows where settings come 
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +33,9 @@ class Settings(BaseSettings):
     db_pool_size: int = 10
     db_max_overflow: int = 10
 
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_slow_ms: int = Field(default=1000, ge=1)
+
     # Session cookie. Secure=True means the browser only sends it over HTTPS:
     # keep False for local http://localhost, set COOKIE_SECURE=true behind Caddy/TLS.
     cookie_secure: bool = False
@@ -40,7 +44,6 @@ class Settings(BaseSettings):
     # Organiser API (/api/v1/admin/*): requests must send "Authorization: Bearer <token>".
     # Unset = the organiser API doesn't exist (404). At least 32 characters.
     admin_token: SecretStr | None = None
-
 
     @field_validator("database_url", "test_database_url")
     @classmethod

@@ -52,9 +52,8 @@ from app.models import (
     TeamDisclosure,
     TeamStakeholderState,
 )
+from app.observability import event as log_event
 from app.portal.clock import interviews_open, not_in_round, team_bonus
-
-log = logging.getLogger(__name__)
 
 TSS = TeamStakeholderState
 TDS = TeamDepartmentState
@@ -229,7 +228,9 @@ async def ask_question(
             )
         )
         if earlier is not None:
-            return await _replay(session, case, team, earlier)
+            replay = await _replay(session, case, team, earlier)
+            log_event("interview.replayed", team_id=str(team.team_id), question_id=str(earlier.id))
+            return replay
 
         event = await current_event(session)
         config = event.config
@@ -461,13 +462,28 @@ async def ask_question(
                 status, reply, cards = "answered", draft, check.cards
                 if check.auto_cited:
                     meta["auto_cited"] = check.auto_cited
-                    log.info("auto-cited (used, not cited): %s", check.auto_cited)
                 break
             failed_checks.append(check.details)
-            log.warning("reply blocked (%s): %s", attempt, check.details)
         meta |= {"failed_checks": failed_checks, "deflected": status == "blocked"}
     except ProviderError as exc:
-        await _refund(maker, team, stakeholder_id, question_id, results, exc)
+        refunded = False
+        try:
+            await _refund(maker, team, stakeholder_id, question_id, results, exc)
+            refunded = True
+        finally:
+            log_event(
+                "interview.provider_failed",
+                level=logging.WARNING if refunded else logging.ERROR,
+                limit=60,
+                team_id=str(team.team_id),
+                question_id=str(question_id),
+                stakeholder_id=stakeholder_id,
+                provider_status=exc.status_code,
+                error_type=type(exc.__cause__ or exc).__name__,
+                purpose="answer" if results else "classify",
+                retryable=exc.retryable,
+                refunded=refunded,
+            )
         raise ApiError(
             503,
             "PROVIDER_BUSY",
@@ -537,6 +553,19 @@ async def ask_question(
                 "warning" if verdict.warn else "strike",
             )  # fmt: skip
 
+    log_event(
+        "interview.completed",
+        team_id=str(team.team_id),
+        question_id=str(question_id),
+        stakeholder_id=stakeholder_id,
+        outcome=status,
+        model_calls=len(results),
+        model_duration_ms=sum(r.latency_ms for _, r in results),
+        failed_drafts=len(failed_checks),
+        evidence_count=len(cards),
+        new_evidence_count=len(new_ids),
+        questions_remaining=quota - used,
+    )
     return AskResult(
         question_id=question_id,
         question_text=text,
@@ -601,10 +630,16 @@ async def _walk_out(
             session, team, stakeholder, stakeholder_id, question_id, meta["label"], "lockout",
             lock_seconds=seconds,
         )  # fmt: skip
-    log.warning(
-        "HR lockout: team %s, %s/%s (via %s), %ss",
-        team.team_id, stakeholder.company, stakeholder.department, stakeholder_id, seconds,
-    )  # fmt: skip
+    log_event(
+        "interview.hr_lockout",
+        level=logging.WARNING,
+        limit=60,
+        team_id=str(team.team_id),
+        question_id=str(question_id),
+        stakeholder_id=stakeholder_id,
+        lockout_seconds=seconds,
+        model_duration_ms=sum(r.latency_ms for _, r in results),
+    )
     return AskResult(
         question_id=question_id,
         question_text="",

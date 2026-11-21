@@ -68,17 +68,19 @@ class AnthropicProvider:
         try:
             response = await self.client.messages.create(**request)
         except (anthropic.APITimeoutError, anthropic.APIConnectionError) as exc:
-            raise ProviderError(f"{type(exc).__name__}: {exc}", retryable=True) from exc
+            raise ProviderError(type(exc).__name__, retryable=True) from exc
         except anthropic.APIStatusError as exc:  # includes RateLimitError, Overloaded, 5xx
             retryable = exc.status_code == 429 or exc.status_code >= 500
-            raise ProviderError(f"HTTP {exc.status_code}: {exc}", retryable=retryable) from exc
+            raise ProviderError(
+                f"HTTP {exc.status_code}", retryable=retryable, status_code=exc.status_code
+            ) from exc
         latency_ms = int((time.perf_counter() - started) * 1000)
 
         text = "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
         try:
             data = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise ProviderError(f"model returned non-JSON: {text[:200]!r}", retryable=True) from exc
+            raise ProviderError("model returned non-JSON", retryable=True) from exc
 
         u = response.usage
         return LlmResult(

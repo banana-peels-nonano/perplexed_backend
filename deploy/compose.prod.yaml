@@ -40,6 +40,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in deploy/.env}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_SLOW_MS: ${LOG_SLOW_MS:-1000}
       SEED_CASE: ${SEED_CASE:-}
       EVENT_NAME: ${EVENT_NAME:-PERPLEXED 2.0}
     volumes:

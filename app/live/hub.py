@@ -34,7 +34,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-log = logging.getLogger(__name__)
+from app.observability import event as log_event
 
 SEND_TIMEOUT = 2.0  # a stuck client must not hold up everyone else's notifications
 MAX_PER_TEAM = 8  # tabs across the team's (at most 2) logged-in laptops
@@ -76,13 +76,25 @@ class Hub:
         return sum(len(c) for c in self._teams.values())
 
     async def _send(self, conns: list[Connection], event: dict[str, Any]) -> None:
-        async def one(conn: Connection) -> None:
+        async def one(conn: Connection) -> bool:
             try:
                 await asyncio.wait_for(conn.socket.send_json(event), SEND_TIMEOUT)
             except Exception:  # gone or stuck: forget it; the tab will reconnect
                 self.remove(conn)
+                return False
+            return True
 
-        await asyncio.gather(*(one(c) for c in conns))
+        if conns:
+            sent = await asyncio.gather(*(one(c) for c in conns))
+            if failed := sent.count(False):
+                log_event(
+                    "ws.delivery_failed",
+                    level=logging.WARNING,
+                    limit=60,
+                    notification=event.get("type"),
+                    failed=failed,
+                    attempted=len(conns),
+                )
 
     async def publish(self, team_id: uuid.UUID, *events: dict[str, Any]) -> None:
         """Events for one team's tabs only."""

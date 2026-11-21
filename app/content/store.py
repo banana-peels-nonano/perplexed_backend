@@ -13,6 +13,7 @@ interview path can leak what isn't in memory.
 from __future__ import annotations
 
 import asyncio
+import time
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -29,6 +30,7 @@ from app.models import (
     Stakeholder,
     StakeholderPassageAccess,
 )
+from app.observability import event
 
 DEFAULT_LABELS = [
     "specific",
@@ -142,8 +144,13 @@ class ContentStore:
         if self._case is None:
             async with self._lock:  # many first requests at once -> one load
                 if self._case is None:
+                    started = time.perf_counter()
                     async with maker() as session:
                         self._case = await load_case_from_db(session)
+                    event(
+                        "case.cache_loaded",
+                        duration_ms=round((time.perf_counter() - started) * 1000, 1),
+                    )
         return self._case
 
     def invalidate(self) -> None:

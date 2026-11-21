@@ -775,7 +775,8 @@ function Leaderboard() {
   return html`<div class="col" style="gap:20px">
     <h1 class="hero-title" style="font-size:34px">Leaderboard</h1>
     <p class="small muted" style="margin:0;max-width:680px">
-      Pick a round, edit any score, save: every team's Rounds page updates at once.
+      Pick a round, edit scores and save. Teams see nothing until you press
+      "Show to teams" for that round; after that, every save updates their Rounds page live.
       Filling the criteria adds them up into the points (you can still overwrite the points).
       Criteria and feedback are for organisers only. Clear the points to remove a score.
     </p>
@@ -784,6 +785,16 @@ function Leaderboard() {
         ${phases.map((p) => html`<option value=${p.key}>Score: ${p.name || p.key}</option>`)}
       </select>
       <button class="btn small" onClick=${save}>Save scores (${Object.keys(edits).length})</button>
+      ${(() => {
+        const r = (lb?.rounds || []).find((x) => x.key === round);
+        if (!r) return html`<span class="small muted">No scores saved for this round yet.</span>`;
+        return html`<span class=${"chip" + (r.visible ? " solid" : "")}>${r.visible ? "Visible to teams" : "Hidden from teams"}</span>
+          <button class=${"btn small " + (r.visible ? "ghost" : "danger")} onClick=${async () => {
+            if (!r.visible && !confirm(`Show ${r.name} scores to every team now?`)) return;
+            await run(() => A(`/phases/${round}/scores/visible`, { method: "PUT", body: { visible: !r.visible } }), r.visible ? "Hidden from teams" : "Now visible to teams");
+            reload();
+          }}>${r.visible ? "Hide from teams" : "Show to teams"}</button>`;
+      })()}
     </div>
     <div class="alert">
       <div class="kicker">Distribution · ${round} · ${scored.length} scored</div>
@@ -797,7 +808,7 @@ function Leaderboard() {
       </div>
     </div>
     <table class="t"><thead><tr><th>#</th><th>Team</th><th>Co.</th>
-      ${(lb?.rounds || []).map((r) => html`<th>${r.name}</th>`)}
+      ${(lb?.rounds || []).map((r) => html`<th>${r.name}${r.visible ? "" : " (hidden)"}</th>`)}
       <th>Total</th>
       ${CRITERIA.map(([, l, max]) => html`<th>${l} /${max}</th>`)}
       <th>${round} pts</th></tr></thead>

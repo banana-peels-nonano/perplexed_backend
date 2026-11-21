@@ -3,7 +3,8 @@
   PUT /admin/phases/{key}/scores    set points per team for a round (live: no publish step)
   GET /admin/leaderboard            totals plus per-round points and notes
   GET /admin/teams/{code}/board     the team's board, evidence cards filled in with the passage
-  GET /leaderboard                  what teams see: rank, team, total, per-round points
+  PUT /admin/phases/{key}/scores/visible   show or hide a round's scores to teams
+  GET /leaderboard                  what teams see: only rounds organisers have shown
 
 Teams that have no score yet are listed with 0, so the board shows everyone from the start.
 """
@@ -17,6 +18,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.admin import require_admin
 from app.api.errors import ApiError
@@ -79,10 +81,30 @@ async def _leaderboard(session) -> dict:
     for i, r in enumerate(rows):  # equal totals share a rank
         r["rank"] = rows[i - 1]["rank"] if i and r["total"] == rows[i - 1]["total"] else i + 1
     scored = {k for r in rows for k in r["rounds"]}
+    visible = set(event.config.get("leaderboard_visible") or [])
     return {
-        "rounds": [{"key": k, "name": n} for _, k, n in phases if k in scored],
+        "rounds": [{"key": k, "name": n, "visible": k in visible} for _, k, n in phases if k in scored],
         "teams": rows,
     }
+
+
+class VisibleIn(BaseModel):
+    visible: bool
+
+
+@admin.put("/phases/{key}/scores/visible")
+async def set_scores_visible(key: str, body: VisibleIn, session: DbSession, request: Request) -> dict:
+    """Teams see a round's scores only once organisers show them; hiding takes them back."""
+    event = await current_event(session)
+    if await session.scalar(select(Phase.id).where(Phase.event_id == event.id, Phase.key == key)) is None:
+        raise ApiError(404, "NOT_FOUND", f"no round {key!r}")
+    shown = set(event.config.get("leaderboard_visible") or [])
+    shown = shown | {key} if body.visible else shown - {key}
+    event.config = {**event.config, "leaderboard_visible": sorted(shown)}
+    flag_modified(event, "config")
+    await session.commit()
+    await request.app.state.hub.broadcast({"type": "leaderboard"})
+    return {"round": key, "visible": body.visible}
 
 
 @admin.get("/leaderboard")
@@ -156,8 +178,14 @@ async def team_board(code: str, session: DbSession) -> dict:
 @teams.get("/leaderboard")
 async def leaderboard(team: CurrentTeam, session: DbSession) -> dict:
     lb = await _leaderboard(session)
-    for r in lb["teams"]:  # teams don't see organisers' notes or who is in which company
-        r.pop("notes")
-        r.pop("breakdowns")
-        r.pop("company")
+    shown = {r["key"] for r in lb["rounds"] if r["visible"]}
+    lb["rounds"] = [{"key": r["key"], "name": r["name"]} for r in lb["rounds"] if r["visible"]]
+    for r in lb["teams"]:  # only shown rounds; no notes, breakdowns or companies
+        r["rounds"] = {k: v for k, v in r["rounds"].items() if k in shown}
+        r["total"] = sum(r["rounds"].values())
+        for k in ("notes", "breakdowns", "company"):
+            r.pop(k)
+    lb["teams"].sort(key=lambda r: (-r["total"], r["team"]))
+    for i, r in enumerate(lb["teams"]):
+        r["rank"] = lb["teams"][i - 1]["rank"] if i and r["total"] == lb["teams"][i - 1]["total"] else i + 1
     return lb

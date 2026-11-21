@@ -209,6 +209,8 @@ async def test_scores_move_the_leaderboard_and_boards_are_visible(seeded, make_c
         headers=AUTH,
     )
     assert r.status_code == 200, r.text
+    assert (await a01.get(f"{API}/leaderboard")).json()["rounds"] == []  # hidden until shown
+    await org.put(f"{API}/admin/phases/round2/scores/visible", json={"visible": True}, headers=AUTH)
     lb = (await a01.get(f"{API}/leaderboard")).json()
     assert [(t["team"], t["rank"], t["total"]) for t in lb["teams"][:2]] == [("B01", 1, 9.0), ("A01", 2, 7.5)]
     assert "notes" not in lb["teams"][0] and "breakdowns" not in lb["teams"][0] and lb["rounds"][0]["key"] == "round2"

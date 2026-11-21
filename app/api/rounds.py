@@ -46,6 +46,7 @@ from app.models import (
     Company,
     Document,
     Phase,
+    Record,
     StakeholderPassageAccess,
     Team,
     TeamRoundStatus,
@@ -214,6 +215,7 @@ class DocumentIn(BaseModel):
     round: str | None = None  # released automatically when this round starts
     company: str | None = None  # None = every company
     teams: list[str] | None = None  # team codes; None = every team (in that company)
+    record: str | None = None  # case record id (e.g. P-A01): bots won't explain it until released
     release_now: bool = False
 
 
@@ -257,6 +259,7 @@ async def _doc_admin_out(session, d: Document) -> dict:
         "kind": d.kind,
         "filename": d.filename,
         "size_bytes": d.size_bytes,
+        "record": d.record_id,
         "round": phase.key if phase else None,
         "company": d.company_id,
         "teams": codes,
@@ -286,6 +289,10 @@ async def add_document(body: DocumentIn, session: DbSession, request: Request) -
         doc.kind, doc.body, doc.size_bytes = "markdown", body.body, len(body.body.encode())
     if body.round is not None:
         doc.phase_id = (await _round(session, body.round)).id
+    if body.record is not None:
+        if await session.get(Record, body.record) is None:
+            raise ApiError(404, "NOT_FOUND", f"no record {body.record!r}")
+        doc.record_id = body.record
     if body.company is not None:
         if await session.get(Company, body.company) is None:
             raise ApiError(404, "NOT_FOUND", f"no company {body.company!r}")
@@ -402,7 +409,8 @@ async def document(doc_id: uuid.UUID, team: CurrentTeam, session: DbSession):
         headers={
             "Content-Disposition": f'inline; filename="{doc.filename}"',
             "X-Content-Type-Options": "nosniff",
-            "Cache-Control": "private, no-store",
+            # ponytail: a document id never changes content (PATCH edits title/release only), so cache it for the day. Ceiling: an un-released doc stays in browsers that already opened it.
+            "Cache-Control": "private, max-age=86400, immutable",
         },
     )
 

@@ -41,15 +41,6 @@ class Settings(BaseSettings):
     # Unset = the organiser API doesn't exist (404). At least 32 characters.
     admin_token: SecretStr | None = None
 
-    # Outgoing mail for team registration (access codes go only to the members' inboxes).
-    # Gmail: smtp.gmail.com, 587, the address, a 16-character app password.
-    # Brevo: smtp-relay.brevo.com, 587, the account login, an SMTP key.
-    smtp_host: str | None = None
-    smtp_port: int = 587
-    smtp_user: str | None = None
-    smtp_password: SecretStr | None = None
-    smtp_from: str | None = None  # e.g. "PERPLEXED 2.0 <perplexed.plex@gmail.com>"
-    public_url: str | None = None  # the address put in emails; default: the request's own
 
     @field_validator("database_url", "test_database_url")
     @classmethod

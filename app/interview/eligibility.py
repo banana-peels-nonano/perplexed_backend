@@ -29,6 +29,8 @@ class QuestionContext:
     # the event's rounds in running order (organisers can add rounds the case file never
     # named); None = the order in the case file
     phase_order: tuple[str, ...] | None = None
+    # records whose handout exists but hasn't reached this team: capped at aware (title only)
+    withheld_records: frozenset[str] = frozenset()
 
 
 def eligible_passages(case: Case, q: QuestionContext) -> dict[str, Mode]:
@@ -56,6 +58,8 @@ def eligible_passages(case: Case, q: QuestionContext) -> dict[str, Mode]:
             or phase_index < order.index(entry.phase_from)
         ):
             continue
+        if case.passage[entry.passage].record in q.withheld_records:
+            mode = min(mode, Mode.aware)
         result[entry.passage] = mode
     return result
 
@@ -69,6 +73,7 @@ def question_context(
     phase: str,
     disclosed: Iterable[str] = (),
     phase_order: Iterable[str] | None = None,
+    withheld_records: Iterable[str] = (),
 ) -> QuestionContext:
     return QuestionContext(
         stakeholder=stakeholder,
@@ -78,4 +83,5 @@ def question_context(
         phase=phase,
         disclosed=frozenset(disclosed),
         phase_order=tuple(phase_order) if phase_order is not None else None,
+        withheld_records=frozenset(withheld_records),
     )

@@ -459,6 +459,7 @@ function Teams() {
     <div class="row">
       <h1 class="hero-title" style="font-size:34px">Teams</h1>
       <span class="muted right">${teams?.length ?? "…"} teams</span>
+      <button class="btn ghost small" onClick=${() => csv(teams || [])}>Download codes CSV</button>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -475,7 +476,7 @@ function Teams() {
             Register
           </button>
           <p class="small muted">
-            Codes are shown once. Download them straight away.
+            Read each team its access code; it stays in the table below.
           </p>
         </div>
       </div>
@@ -540,6 +541,7 @@ function Teams() {
           <tr>
             <th>Code</th>
             <th>Name</th>
+            <th>Access code</th>
             <th>Company</th>
             <th>Laptops</th>
             <th>Qs</th>
@@ -558,6 +560,7 @@ function Teams() {
               html`<tr key=${t.code}>
                 <td><b class="codes">${t.code}</b></td>
                 <td>${t.name}</td>
+                <td class="codes">${t.access_code || "—"}</td>
                 <td>
                   <select
                     class="select"
@@ -611,7 +614,7 @@ function Teams() {
     </div>
     ${
       created &&
-      html`<${Modal} title="New access codes — shown once" onClose=${() => setCreated(null)}>
+      html`<${Modal} title="New access codes" onClose=${() => setCreated(null)}>
       <table class="t"><thead><tr><th>Code</th><th>Name</th><th>Access code</th></tr></thead><tbody>${created.map(
         (r) =>
           html`<tr>
@@ -660,6 +663,11 @@ function TeamDetail({ t, onClose }) {
           );
       }}>New access code</button>
       ${code && html`<span class="codes">${code.access_code}</span>`}
+      <button class="btn danger small" onClick=${async () => {
+        if (confirm(`Remove ${t.code} ${t.name}? Only possible before they've played.`) &&
+            (await run(() => A(`/teams/${t.code}`, { method: "DELETE" }), "Removed")))
+          onClose();
+      }}>Remove team</button>
     </div>
     <table class="t"><thead><tr><th>Stakeholder</th><th>Dept</th><th>Trust</th><th>Tier</th><th>Qs used</th><th>Strikes</th><th>Lockout</th><th></th></tr></thead>
       <tbody>${t.stakeholders.map(
@@ -1237,160 +1245,6 @@ function Alerts({ compact }) {
   </div>`;
 }
 
-// ------------------------------------------------------------------ registration
-function Registrations() {
-  const [data, reload] = usePoll(() => A("/registrations"), 15000);
-  const [q, setQ] = useState("");
-  if (!data) return html`<div class="empty">Loading…</div>`;
-  const r = data.rules;
-  const setRule = async (patch, ok) => {
-    await run(
-      () => A("/config", { method: "PATCH", body: { registration: patch } }),
-      ok,
-    );
-    reload();
-  };
-  const shown = data.teams.filter(
-    (t) =>
-      !q ||
-      (t.code + t.name + t.members.map((m) => m.email).join(" "))
-        .toLowerCase()
-        .includes(q.toLowerCase()),
-  );
-  const registered = data.teams.filter((t) => t.members.length).length;
-  return html`<div class="col" style="gap:20px">
-    <div class="row">
-      <h1 class="hero-title" style="font-size:34px">Registration</h1>
-      <span class="right muted"
-        >${registered} ${registered === 1 ? "team" : "teams"} signed up</span
-      >
-    </div>
-    ${!data.smtp_configured && html`<div class="alert"><b>Email isn't set up.</b> Teams can still register, but no codes go out until SMTP_HOST, SMTP_USER, SMTP_PASSWORD and SMTP_FROM are in the server's .env. Then use Resend.</div>`}
-    <div class="panel">
-      <div class="panel-b row" style="flex-wrap:wrap;gap:16px">
-        <span class=${"chip" + (r.open ? " solid" : "")}
-          >${r.open ? "open" : "closed"}</span
-        >
-        <button
-          class="btn"
-          onClick=${() => setRule({ open: !r.open }, r.open ? "Registration closed" : "Registration open")}
-        >
-          ${r.open ? "Close registration" : "Open registration"}
-        </button>
-        <label class="row small"
-          >Members
-          <input
-            class="input"
-            type="number"
-            min="1"
-            max="10"
-            style="width:64px;padding:4px 6px"
-            value=${r.min_members}
-            onChange=${(e) => setRule({ min_members: +e.target.value }, "Saved")} />
-          to
-          <input
-            class="input"
-            type="number"
-            min="1"
-            max="10"
-            style="width:64px;padding:4px 6px"
-            value=${r.max_members}
-            onChange=${(e) => setRule({ max_members: +e.target.value }, "Saved")}
-        /></label>
-        <label class="row small"
-          >Domain
-          <input
-            class="input"
-            style="width:160px;padding:4px 6px"
-            value=${r.domain}
-            onChange=${(e) => setRule({ domain: e.target.value.trim().toLowerCase() }, "Saved")}
-        /></label>
-        <a class="right small" href="/register" target="_blank"
-          >Open the sign-up page ↗</a
-        >
-      </div>
-    </div>
-    <input
-      class="input"
-      style="max-width:300px"
-      placeholder="Filter by team or email…"
-      value=${q}
-      onInput=${(e) => setQ(e.target.value)}
-    />
-    <table class="t">
-      <thead>
-        <tr>
-          <th>Team</th>
-          <th>Members</th>
-          <th>Company</th>
-          <th>Last email</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${shown.map(
-          (t) =>
-            html`<tr key=${t.code}>
-              <td><b>${t.code}</b> ${t.name}</td>
-              <td class="small">
-                ${t.members.map((m) => html`<div>${m.name} · ${m.email}</div>`)}
-              </td>
-              <td>${t.company || "—"}</td>
-              <td>
-                ${t.last_email ? html`<span class=${"chip" + (t.last_email.status === "sent" ? " solid" : "")} title=${t.last_email.error || ""}>${t.last_email.status}</span> <span class="tiny muted">${ago(t.last_email.at)}</span>` : "—"}
-              </td>
-              <td style="white-space:nowrap">
-                ${
-                  t.members.length
-                    ? html`<button
-                        class="btn ghost small"
-                        onClick=${async () => {
-                          if (
-                            confirm(
-                              `Send ${t.code} a new code? The old one stops working.`,
-                            )
-                          ) {
-                            await run(
-                              () =>
-                                A(`/teams/${t.code}/resend`, {
-                                  method: "POST",
-                                }),
-                              "Sent",
-                            );
-                            reload();
-                          }
-                        }}
-                      >
-                        Resend code
-                      </button>`
-                    : null
-                }
-                <button
-                  class="btn link small"
-                  onClick=${async () => {
-                    if (
-                      confirm(
-                        `Remove ${t.code} ${t.name}? Only possible before they've played.`,
-                      )
-                    ) {
-                      await run(
-                        () => A(`/teams/${t.code}`, { method: "DELETE" }),
-                        "Removed",
-                      );
-                      reload();
-                    }
-                  }}
-                >
-                  Remove
-                </button>
-              </td>
-            </tr>`,
-        )}
-      </tbody>
-    </table>
-  </div>`;
-}
-
 // ------------------------------------------------------------------ alliances
 function Alliances() {
   const [list, reload] = usePoll(() => A("/alliances"), 10000);
@@ -1707,7 +1561,6 @@ ${JSON.stringify(costs, null, 2)}</pre>
 // ------------------------------------------------------------------ app
 const TABS = [
   ["live", "Live", Live],
-  ["registration", "Registration", Registrations],
   ["rounds", "Rounds", Rounds],
   ["teams", "Teams", Teams],
   ["results", "Results", Results],

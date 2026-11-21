@@ -253,6 +253,7 @@ async def ensure_teams(
                     name=f"Test team {code}",
                     company_id=company_id,
                     access_code_hash=hash_access_code(access_code),
+                    access_code=access_code,
                     max_sessions=config["max_sessions_per_team"],
                 )
                 session.add(team)
@@ -261,6 +262,7 @@ async def ensure_teams(
             elif rotate_codes:
                 access_code = generate_access_code()
                 team.access_code_hash = hash_access_code(access_code)
+                team.access_code = access_code
                 new_codes[code] = access_code
             else:
                 existing.append(code)

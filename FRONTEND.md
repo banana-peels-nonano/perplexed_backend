@@ -207,12 +207,10 @@ companies, and everything comes from the API.
 
 ## 10. Event credentials
 
-For the event, organisers create teams in Console → **Teams**. The generated access codes
-are shown once and can be downloaded as a CSV; the organiser distributes them securely.
+For the event, organisers create teams in Console → **Teams**. Each team's access code
+stays visible in the Teams table and downloads as a CSV; organisers read it out to the team.
 The console can rotate a team's code, which invalidates the old code and logs out active
-sessions. SMTP is disabled, and the `/register` self-registration page is not part of the
-event workflow. The registration API and page remain in the codebase for the legacy
-self-registration flow.
+sessions. Self-registration (`/register`) and email delivery have been removed.
 
 ## 11. Coming next
 

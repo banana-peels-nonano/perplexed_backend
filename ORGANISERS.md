@@ -18,10 +18,10 @@ that tab until you close it or log out in the dialog.
 
 ## Before the event: create teams and credentials
 
-SMTP is disabled. Organisers create accounts and manage access codes in the console's
-**Teams** tab; do not use `/register` or the **Registration** tab for event onboarding.
-Enter one team name per line and select **Register**. The console displays the generated
-access codes once. Download the CSV immediately and distribute each team's code securely.
+Organisers create accounts and manage access codes in the console's **Teams** tab (there
+is no self-registration or email). Enter one team name per line and select **Register**.
+Each team's code stays in the table's **Access code** column; **Download codes CSV** exports
+them all. Read each team its code; treat the table and CSV as secrets.
 The database stores only code hashes, so a lost code must be rotated and redistributed.
 
 The **Teams** tab also lets organisers create a replacement access code. Rotation disables
@@ -43,9 +43,8 @@ curl -s -H "$AUTH" -X PUT $PX/teams/T004/company -H 'Content-Type: application/j
 curl -s -H "$AUTH" -X POST $PX/teams/T004/access-code
 ```
 
-Treat the response from team creation or code rotation as a secret: it contains the
-one-time plaintext code. SMTP-backed self-registration routes remain in the codebase but
-are outside the event workflow.
+Treat team creation and code rotation responses, `GET /admin/teams` and the CSV as secrets:
+they contain plaintext access codes.
 
 `assign-companies` with `"only_unassigned": false` re-deals every team that hasn't asked
 a question yet. The same `seed` gives the same draw, so you can rerun it in front of the
@@ -111,6 +110,13 @@ curl -s -H "$AUTH" -X DELETE $PX/documents/<id>
 
 Files up to 15 MB. A document is visible once released by hand, or when its round starts.
 Teams can't tell a document meant for someone else from one that doesn't exist.
+
+**Handouts linked to case records.** Add `"record": "P-A01"` when a file *is* a case record.
+Until that document reaches a team, every stakeholder is capped at *aware* for that record:
+they can say the report exists, never what it says. Releasing it lifts the cap on the next
+question (no restart). Use this to pace a case: hand out a few records at round start and
+the rest when teams ask for them. Cached copies survive withdrawal, so don't rely on
+un-releasing.
 
 ## Round results
 

@@ -144,3 +144,11 @@ def test_a_case_can_carry_its_own_event_config():
     data["config"] = {"admin_token": "x"}
     with pytest.raises(ValueError, match="config: unknown keys"):
         Case.model_validate(data)
+
+
+def test_withheld_record_is_capped_at_aware():
+    # the CFO may quote A-FIN-001#1 at any tier; while its handout is withheld, title only
+    q = dict(stakeholder="cfo", tier="open", label="specific", topics=["revenue"], phase="solo")
+    assert eligible_passages(CASE, question_context(**q))["A-FIN-001#1"] == Mode.quote
+    capped = eligible_passages(CASE, question_context(**q, withheld_records=["A-FIN-001"]))
+    assert capped["A-FIN-001#1"] == Mode.aware

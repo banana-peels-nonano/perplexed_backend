@@ -6,6 +6,8 @@ Then open:     http://127.0.0.1:8000/docs   (interactive API page, generated fro
 
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -48,6 +50,28 @@ def create_app(provider: LlmProvider | None = None) -> FastAPI:
     app.state.content = ContentStore()
     app.state.hub = Hub()  # live notifications (app/live/hub.py)
     install_error_handlers(app)
+
+    # ponytail: one log line per API call (static files + /healthz skipped). Bounded by the
+    # docker log cap (5x10MB); at 50 teams expect ~10-20MB/day. Errors/slow -> WARNING.
+    reqlog = logging.getLogger("uvicorn.error")
+
+    @app.middleware("http")
+    async def request_log(request: Request, call_next):
+        path = request.url.path
+        if not path.startswith("/api/"):
+            return await call_next(request)
+        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "-")
+        t0 = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            ms = (time.perf_counter() - t0) * 1000
+            reqlog.exception("REQ %s %s -> EXC %.0fms ip=%s", request.method, path, ms, ip)
+            raise
+        ms = (time.perf_counter() - t0) * 1000
+        level = logging.WARNING if response.status_code >= 400 or ms > 1000 else logging.INFO
+        reqlog.log(level, "REQ %s %s -> %d %.0fms ip=%s", request.method, path, response.status_code, ms, ip)
+        return response
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(stakeholders.router, prefix=API_PREFIX)
     app.include_router(interview.router, prefix=API_PREFIX)
@@ -59,7 +83,6 @@ def create_app(provider: LlmProvider | None = None) -> FastAPI:
     app.include_router(alliances.admin, prefix=API_PREFIX)
     app.include_router(submissions.teams, prefix=API_PREFIX)
     app.include_router(submissions.admin, prefix=API_PREFIX)
-    app.include_router(registration.public, prefix=API_PREFIX)
     app.include_router(registration.admin, prefix=API_PREFIX)
     app.include_router(live.router, prefix=API_PREFIX)
 
@@ -90,7 +113,7 @@ def mount_web(app: FastAPI) -> None:
     """The frontend is static files served by this same app: one origin, so the session
     cookie (SameSite=Strict, HttpOnly) just works and there's one thing to deploy.
     /         the team portal          /console  the organiser console
-    /display  the projector page       /register team sign-up (when organisers open it)
+    /display  the projector page
     everything else under / is a static file"""
     if not WEB.is_dir():
         return
@@ -107,10 +130,6 @@ def mount_web(app: FastAPI) -> None:
     @app.get("/console", include_in_schema=False)
     async def console() -> FileResponse:
         return FileResponse(WEB / "console.html")
-
-    @app.get("/register", include_in_schema=False)
-    async def register_page() -> FileResponse:
-        return FileResponse(WEB / "register.html")
 
     @app.get("/display", include_in_schema=False)
     async def display() -> FileResponse:

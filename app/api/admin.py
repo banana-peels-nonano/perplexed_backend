@@ -244,6 +244,7 @@ class DepartmentStateOut(BaseModel):
 class TeamAdminOut(BaseModel):
     code: str
     name: str
+    access_code: str | None  # None: made before codes were kept; rotate to get one
     company_id: str | None
     active_sessions: int
     evidence_count: int
@@ -378,6 +379,7 @@ async def teams(session: DbSession) -> list[TeamAdminOut]:
             TeamAdminOut(
                 code=t.code,
                 name=t.name,
+                access_code=t.access_code,
                 company_id=t.company_id,
                 active_sessions=sessions.get(t.id, 0),
                 evidence_count=evidence.get(t.id, 0),
@@ -507,7 +509,7 @@ class TeamsIn(BaseModel):
 class NewTeamOut(BaseModel):
     code: str
     name: str
-    access_code: str  # shown once: only its hash is stored
+    access_code: str
 
 
 @router.post("/teams", response_model=list[NewTeamOut], status_code=201)
@@ -528,6 +530,7 @@ async def register_teams(body: TeamsIn, session: DbSession) -> list[NewTeamOut]:
                 name=name.strip(),
                 company_id=None,
                 access_code_hash=hash_access_code(access_code),
+                access_code=access_code,
                 max_sessions=config.get("max_sessions_per_team", 2),
             )
         )
@@ -542,6 +545,7 @@ async def rotate_access_code(code: str, session: DbSession, request: Request) ->
     team = await _team(session, code)
     access_code = generate_access_code()
     team.access_code_hash = hash_access_code(access_code)
+    team.access_code = access_code
     revoked = (
         await session.scalars(
             update(TeamSession)

@@ -834,21 +834,52 @@ function Leaderboard() {
 
 function BoardView({ code }) {
   const [b, setB] = useState(null);
+  const [checked, setChecked] = useState(null);
+  useTick(1000);
   useEffect(() => {
-    run(() => A(`/teams/${code}/board`)).then(setB);
+    let live = true;
+    const load = () =>
+      A(`/teams/${code}/board`).then((x) => { if (live) { setB(x); setChecked(Date.now()); } }).catch(() => {});
+    load();
+    const t = setInterval(load, 5000); // ponytail: polling; boards change slowly
+    return () => { live = false; clearInterval(t); };
   }, [code]);
   if (!b) return html`<p class="small muted">Loading board…</p>`;
   const byId = Object.fromEntries(b.cards.map((c) => [c.id, c]));
-  const label = (c) =>
-    !c ? "?" : c.kind === "evidence" ? `${c.record_id || c.passage_id}` : c.kind === "quote" ? `quote (${c.stakeholder_id})` : "note";
-  return html`<div class="col" style="margin-top:16px;gap:8px">
-    <div class="kicker">Evidence board · v${b.version} · ${b.cards.length} cards · ${b.links.length} links${b.updated_at ? " · saved " + ago(b.updated_at) : ""}</div>
-    ${b.cards.map((c) => html`<div class="alert">
-      <div class="tiny muted">${c.kind}${c.kind === "evidence" ? ` · ${c.passage_id}${c.record_title ? " · " + c.record_title : ""}` : ""}${c.kind === "quote" ? ` · ${c.stakeholder_id}` : ""}</div>
-      <div class="q">${c.text || ""}</div>
-    </div>`)}
-    ${b.links.length ? html`<div class="kicker" style="margin-top:8px">Links</div>
-      ${b.links.map((l) => html`<div class="small">${label(byId[l.from])} —${l.label || "linked"}→ ${label(byId[l.to])}</div>`)}` : null}
+  const W = 240, H = 90;
+  const mid = (c) => ({ x: (c.x || 0) + W / 2, y: (c.y || 0) + H / 2 });
+  const width = Math.max(800, ...b.cards.map((c) => (c.x || 0) + W + 40));
+  const height = Math.max(400, ...b.cards.map((c) => (c.y || 0) + 260));
+  const head = (c) =>
+    c.kind === "evidence" ? `${c.record_id || c.passage_id}${c.record_title ? " · " + c.record_title : ""}` : c.kind === "quote" ? `quote · ${c.stakeholder_id || ""}` : "note";
+  const short = (c) => (!c ? "?" : c.kind === "note" ? `note “${(c.text || "").slice(0, 40)}”` : head(c));
+  const notes = b.cards.filter((c) => c.kind === "note");
+  return html`<div class="col" style="margin-top:16px;gap:10px">
+    <div class="kicker">Evidence board · version ${b.version} · ${b.cards.length} cards (${notes.length} notes) · ${b.links.length} links</div>
+    <div class="small muted">
+      Team last saved ${b.updated_at ? ago(b.updated_at) : "never"} · refreshed ${checked ? Math.round((Date.now() - checked) / 1000) + "s ago" : "—"} (auto every 5s; this is exactly what is saved on the server)
+    </div>
+    <div class="board-area" style="height:70vh;border:1px solid var(--line-2);border-radius:var(--r)">
+      <div class="board-surface" style=${`width:${width}px;height:${height}px`}>
+        <svg>
+          ${b.links.map((l, i) => {
+            const f = byId[l.from], t = byId[l.to];
+            if (!f || !t) return null;
+            const p = mid(f), r = mid(t);
+            return html`<g key=${i}><line x1=${p.x} y1=${p.y} x2=${r.x} y2=${r.y} />
+              ${l.label && html`<text x=${(p.x + r.x) / 2} y=${(p.y + r.y) / 2 - 4} text-anchor="middle">${l.label}</text>`}</g>`;
+          })}
+        </svg>
+        ${b.cards.map((c) => html`<div key=${c.id} class=${"bcard " + c.kind} style=${`left:${c.x || 0}px;top:${c.y || 0}px;cursor:default`}>
+          <div class="k"><span>${head(c)}</span></div>
+          <div class="body" style="white-space:pre-wrap">${c.text || ""}</div>
+        </div>`)}
+      </div>
+    </div>
+    <div class="kicker" style="margin-top:6px">Notes (${notes.length})</div>
+    ${notes.length ? notes.map((c) => html`<div class="alert"><div class="q" style="white-space:pre-wrap">${c.text}</div></div>`) : html`<div class="small muted">No notes.</div>`}
+    <div class="kicker" style="margin-top:6px">Links (${b.links.length})</div>
+    ${b.links.length ? b.links.map((l) => html`<div class="small">${short(byId[l.from])} —<b>${l.label || "linked"}</b>→ ${short(byId[l.to])}</div>`) : html`<div class="small muted">No links.</div>`}
   </div>`;
 }
 
